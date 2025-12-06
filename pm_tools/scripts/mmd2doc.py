@@ -900,7 +900,7 @@ def build_doc(opts):
 
         # Call pandoc to render (pre-processed) markdown
         if (opts.fmt == "docx"):
-            _call('"%s" %s -s "%s" -t docx --normalize --number-sections --reference-docx=%s -o "%s"' % (g.pandoc, variables, infile, g.dotx, cwd_outfile), cwd=dirname)
+            _call('"%s" %s -s "%s" -t docx --number-sections --reference-docx=%s -o "%s"' % (g.pandoc, variables, infile, g.dotx, cwd_outfile), cwd=dirname)
 
         elif (opts.email):
             cmd = '"%s" "%s" -o "%s" %s'%(g.pandoc, infile, cwd_outfile, opts.pandoc_args)
@@ -934,7 +934,7 @@ def build_doc(opts):
                     cmd += ' --template "%s"'%g.html_template
                 else:
                     cmd += ' --template "%s"'%(os.path.join(g.template_path, opts.template))
-                cmd += ' --highlight-style=tango --normalize'
+                cmd += ' --highlight-style=tango'
                 cmd += ' --include-in-header="%s"'%os.path.join(g.css_path, "common.css")
                 cmd += ' --include-in-header="%s"'%g.pm_doc_js
                 if (opts.fmt == "pdf"):
