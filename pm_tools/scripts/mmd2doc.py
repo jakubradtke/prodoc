@@ -304,7 +304,7 @@ class PandocPreproc(object):
         # By default, point to the directory of currently parsed document
         return make_dir(self.dirs[level], self.auto)
 
-    def visio(self, code, fname, sheetname, title=None, format='svg', div_style=None):
+    def visio(self, code, fname, sheetname, title=None, format='svg', div_style=None, link_source=True, keep_svg=0):
         """
         Open up a specific tab of an visio file and dump it to png
 
@@ -1411,6 +1411,12 @@ def cleanstr(s):
     s = re.sub(r'\xE2\x80\x9c', '"', s)               # left quote
     s = re.sub(r'\xE2\x80\x9d', '"', s)               # right quote
     s = re.sub(r'\xE2\x80\xa6', '...', s)             # ellipsis
+    s = re.sub(r'\xC2\xae', '&reg', s)                # registered
+    s = re.sub(r'\xe2\x86', '->', s)                  # right arrow
+    s = re.sub(r'\xf0\x9d', '-', s)                   # minus
+    s = re.sub(r'\xef\x83\x9f', '', s)                # ignore
+    s = re.sub(r'\xe2\x8b', '', s)                    # ignore
+
     # ASCII-8bit (latin encoding)
     s = re.sub(r'\x85' , '...', s)     # ellipsis
     s = re.sub(r'[\x91\x92]', "'", s)  # smart quote
@@ -1426,6 +1432,10 @@ def cleanstr(s):
     s = re.sub(r'\xbc', '1/4', s)
     s = re.sub(r'\xbf', ' ', s)        # inverted question mark??
     s = re.sub(r'\xd7', 'x', s)        # special x char
+    s = re.sub(r'\x80' , '', s)        # ignore
+    s = re.sub(r'\xc2' , '', s)        # ignore
+    s = re.sub(r'\xe2' , '', s)        # ignore
+    s = re.sub(r'\x8b' , '', s)        # ignore
 
     # Use HTML "micro" entity for 1us, 0.8uV, 100uA, and so on
     s = fix_units(s)

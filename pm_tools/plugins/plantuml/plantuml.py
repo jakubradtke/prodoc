@@ -9,7 +9,7 @@ class PlantumlPlugin(object):
         self.token = "plantuml"
         self.pp.register_plugin(self)
 
-    def process(self, code, filename_or_title, title=None, div_style=None):
+    def process(self, code, filename_or_title, title=None, dtype=None, div_style=None):
         """
         Process plantuml code and return the proper insertion string
         """
