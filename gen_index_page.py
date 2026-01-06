@@ -2,56 +2,84 @@ import sys
 from pathlib import Path
 import yaml
 from typing import Iterable, Iterator, NamedTuple, Optional
+from datetime import date
 
 HEAD_HTML ="""
 <head>
   <meta charset="utf-8">
-  <title>Documents index</title>
+  <title>Documents repository</title>
   <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f5f5f7;
-      color: #222;
-      line-height: 1.5;
-    }
-    .container {
-      max-width: 800px;
-      margin: 40px auto;
-      padding: 24px 32px;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
-    }
-    h1 {
-      margin-top: 0;
-      margin-bottom: 0.5em;
-    }
-    h2 {
-      margin-top: 1.5em;
-      border-bottom: 1px solid #eee;
-      padding-bottom: 0.25em;
-      font-size: 1.1rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #555;
-    }
-    ul {
-      list-style-type: disc;
-      padding-left: 1.5rem;
-      margin: 0.5em 0 0;
-    }
-    li {
-      margin: 0.25em 0;
-    }
-    a {
-      color: #0066cc;
-      text-decoration: none;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
+* { box-sizing: border-box; }
+html, body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f5f5f7;
+  color: #222;
+  line-height: 1.5;
+  font-size: 14px; /* mniejsza czcionka */
+}
+
+/* kontener na całą stronę */
+.container {
+  width: 100%;
+  height: 100%;
+  padding: 24px 32px;
+  background: #fff;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+h1 {
+  margin-top: 0;
+  margin-bottom: 0.5em;
+}
+h2 {
+  margin-top: 0;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 0.25em;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+}
+ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 0.5em 0 0;
+}
+li {
+  margin: 0.25em 0;
+}
+a {
+  color: #0066cc;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* Dwie kolumny */
+.columns {
+  display: flex;
+  gap: 32px;
+  height: calc(100% - 3rem); /* trochę miejsca na nagłówek */
+}
+.column {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* Stack na małych ekranach */
+@media (max-width: 700px) {
+  .columns {
+    flex-direction: column;
+    height: auto;
+  }
+}
   </style>
 </head>
 """
@@ -147,21 +175,25 @@ if __name__ == "__main__":
         if section:
             sections.append(section)
 
+    today_str = date.today().strftime("%B %d, %Y")
+
     parts: list[str] = [
         "<!DOCTYPE html>",
         "<html>",
         HEAD_HTML,
         "<body><div class=\"container\">",
-        "<h1>Documents index</h1>",
+        "<h1>Documents repository</h1>",
+        f'<h3>{today_str}</h3>'
+        "<div class=columns>",
     ]
 
     for header, links in sections:
-        parts.append(f"<h2>{header}</h2>")
+        parts.append(f"<div class=column><h2>{header}</h2>")
         parts.append("<ul>")
         for info in sorted(links, key=lambda i: (i.title is None, i.title or "")):
             text = info.title or info.html_path
             parts.append(f'  <li><a href="{info.html_path}">{text}</a></li>')
-        parts.append("</ul>")
+        parts.append("</ul></div>")
 
-    parts.extend(["</div></body>", "</html>"])
+    parts.extend(["</div></div></body>", "</html>"])
     (root / "index.html").write_text("\n".join(parts), encoding="utf-8")
