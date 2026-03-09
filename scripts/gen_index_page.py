@@ -1,88 +1,16 @@
+"""Generate index.html for a documents repository from directory structure."""
+
 import sys
 from pathlib import Path
-import yaml
-from typing import Iterable, Iterator, NamedTuple, Optional
 from datetime import date
+from typing import Iterable, Iterator, NamedTuple, Optional
 
-HEAD_HTML ="""
-<head>
-  <meta charset="utf-8">
-  <title>Documents repository</title>
-  <style>
-* { box-sizing: border-box; }
-html, body {
-  height: 100%;
-  margin: 0;
-}
-body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #f5f5f7;
-  color: #222;
-  line-height: 1.5;
-  font-size: 14px; /* mniejsza czcionka */
-}
+import yaml
 
-/* kontener na całą stronę */
-.container {
-  width: 100%;
-  height: 100%;
-  padding: 24px 32px;
-  background: #fff;
-  box-shadow: none;
-  border-radius: 0;
-}
+# Head HTML is loaded from index_head.html next to this script.
+SCRIPT_DIR = Path(__file__).resolve().parent
+HEAD_HTML_PATH = SCRIPT_DIR / "index_head.html"
 
-h1 {
-  margin-top: 0;
-  margin-bottom: 0.5em;
-}
-h2 {
-  margin-top: 0;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 0.25em;
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #555;
-}
-ul {
-  list-style-type: disc;
-  padding-left: 1.5rem;
-  margin: 0.5em 0 0;
-}
-li {
-  margin: 0.25em 0;
-}
-a {
-  color: #0066cc;
-  text-decoration: none;
-}
-a:hover {
-  text-decoration: underline;
-}
-
-/* Dwie kolumny */
-.columns {
-  display: flex;
-  gap: 32px;
-  height: calc(100% - 3rem); /* trochę miejsca na nagłówek */
-}
-.column {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-}
-
-/* Stack na małych ekranach */
-@media (max-width: 700px) {
-  .columns {
-    flex-direction: column;
-    height: auto;
-  }
-}
-  </style>
-</head>
-"""
 
 class DocInfo(NamedTuple):
     html_path: Path
@@ -90,7 +18,14 @@ class DocInfo(NamedTuple):
     title: Optional[str]
     classification: Optional[str]
 
+
+def load_head_html() -> str:
+    """Load <head> fragment from external template file."""
+    return HEAD_HTML_PATH.read_text(encoding="utf-8").strip()
+
+
 def find_frontmatter_title(mmd_path: Path) -> tuple[Optional[str], Optional[str]]:
+    """Extract title and classification from MMD file YAML frontmatter."""
     text = mmd_path.read_text(encoding="utf-8")
 
     if not text.startswith("---"):
@@ -120,13 +55,17 @@ def find_frontmatter_title(mmd_path: Path) -> tuple[Optional[str], Optional[str]
     classification = data.get("classification")
     return title, classification
 
+
 def enrich_with_mmd(
     html_paths: Iterable[str] | Iterable[Path],
     root: Path,
-) -> Iterable[DocInfo]:
+) -> Iterator[DocInfo]:
+    """Attach MMD metadata (title, classification) to each HTML path."""
     for html in html_paths:
         rel_html_path = Path(html)
-        full_html_path = rel_html_path if rel_html_path.is_absolute() else root / rel_html_path
+        full_html_path = (
+            rel_html_path if rel_html_path.is_absolute() else root / rel_html_path
+        )
         mmd_path = full_html_path.with_suffix(".mmd")
 
         if mmd_path.is_file():
@@ -141,7 +80,9 @@ def enrich_with_mmd(
             classification=classification,
         )
 
-def collect_html(dir_path: Path, root: Path) -> Iterable[str]:
+
+def collect_html(dir_path: Path, root: Path) -> Iterator[str]:
+    """Yield relative paths to .html files, excluding index.html and /auto/."""
     for path in sorted(dir_path.rglob("*.html")):
         if path.name == "index.html":
             continue
@@ -150,20 +91,20 @@ def collect_html(dir_path: Path, root: Path) -> Iterable[str]:
             continue
         yield rel_str
 
-def collect_section(header: str, base: Path, root: Path) -> tuple[str, list[DocInfo]] | None:
+
+def collect_section(
+    header: str, base: Path, root: Path
+) -> Optional[tuple[str, list[DocInfo]]]:
+    """Build one section (header + list of DocInfo). Returns None if no docs."""
     links = list(collect_html(base, root))
     docs = list(enrich_with_mmd(links, root=root))
     return (header, docs) if docs else None
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <start path>")
-        sys.exit(1)
 
-    root = Path(sys.argv[1]).resolve()
-    index_order = root / "index_order.txt"
-
+def gather_sections(root: Path) -> list[tuple[str, list[DocInfo]]]:
+    """Gather sections from index_order.txt or a single 'Documents' section."""
     sections: list[tuple[str, list[DocInfo]]] = []
+    index_order = root / "index_order.txt"
 
     if index_order.exists():
         for child in sorted(p for p in root.iterdir() if p.is_dir()):
@@ -175,15 +116,21 @@ if __name__ == "__main__":
         if section:
             sections.append(section)
 
+    return sections
+
+
+def build_index_html(root: Path, head_html: str) -> str:
+    """Build full index.html content."""
+    sections = gather_sections(root)
     today_str = date.today().strftime("%B %d, %Y")
 
-    parts: list[str] = [
+    parts = [
         "<!DOCTYPE html>",
         "<html>",
-        HEAD_HTML,
+        head_html,
         "<body><div class=\"container\">",
         "<h1>Documents repository</h1>",
-        f'<h3>{today_str}</h3>'
+        f"<h3>{today_str}</h3>",
         "<div class=columns>",
     ]
 
@@ -196,4 +143,20 @@ if __name__ == "__main__":
         parts.append("</ul></div>")
 
     parts.extend(["</div></div></body>", "</html>"])
-    (root / "index.html").write_text("\n".join(parts), encoding="utf-8")
+    return "\n".join(parts)
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <start path>")
+        return 1
+
+    root = Path(sys.argv[1]).resolve()
+    head_html = load_head_html()
+    html = build_index_html(root, head_html)
+    (root / "index.html").write_text(html, encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
