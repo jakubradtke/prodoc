@@ -392,6 +392,8 @@ class PandocPreproc(object):
             # Fall back to name-based match
             func = getattr(self, token.typ.lower())
         kwargs.update(div_style=div_style)
+        if len(args) == 0:
+            args.append("empty")
         start_time = time.time()
         if g.opts.perf: sys.stdout.write("Running %s..." % (token.value.splitlines()[0]))
         try:
