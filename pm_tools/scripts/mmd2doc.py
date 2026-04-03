@@ -513,8 +513,8 @@ class PandocPreproc(object):
                 raise Exception("Did not understand token %s" % token.typ)
 
             try:
-                s = s.encode('ascii', 'xmlcharrefreplace')
-            except:
+                s = to_ascii_for_pandoc(s)
+            except Exception:
                 print "This error will be fixed in the tool if you send the log to the developer"
                 print "While processing token %s: %s"%(token.typ, repr(s))
                 raise
@@ -733,7 +733,7 @@ def inline_svg(dirname, svg_full_path, title, fmt, div_style):
         s += "<p class=\"caption\">%s</p>"%title
     s += "</div>"
 
-    s = s.encode('ascii', 'xmlcharrefreplace')
+    s = to_ascii_for_pandoc(s)
 
     return s
 
@@ -1394,6 +1394,21 @@ def make_dir(root, subdir):
                 raise
     return dirname
 
+def to_ascii_for_pandoc(s):
+    """
+    Python 2: build ASCII-only output (bytes) with XML char refs for non-ASCII.
+    Byte strings must be decoded first; calling .encode() on str decodes as
+    ASCII implicitly and raises UnicodeDecodeError on UTF-8 content.
+    """
+    if s is None:
+        return ""
+    if isinstance(s, unicode):
+        return s.encode("ascii", "xmlcharrefreplace")
+    try:
+        return s.decode("utf-8").encode("ascii", "xmlcharrefreplace")
+    except UnicodeDecodeError:
+        return s.decode("utf-8", "replace").encode("ascii", "xmlcharrefreplace")
+
 def cleanstr(s):
     """
     Remove non-ascii (some specific and frequent chars > 0x7f)
@@ -1436,8 +1451,8 @@ def cleanstr(s):
     s = re.sub(r'\xbf', ' ', s)        # inverted question mark??
     s = re.sub(r'\xd7', 'x', s)        # special x char
     s = re.sub(r'\x80' , '', s)        # ignore
-    s = re.sub(r'\xc2' , '', s)        # ignore
-    s = re.sub(r'\xe2' , '', s)        # ignore
+    # Do not strip bare \xc2 or \xe2: they start valid UTF-8 sequences (e.g. U+2122
+    # TRADE MARK is E2 84 A2; stripping E2 leaves invalid bytes and breaks builds).
     s = re.sub(r'\x8b' , '', s)        # ignore
 
     # Use HTML "micro" entity for 1us, 0.8uV, 100uA, and so on
