@@ -308,6 +308,31 @@ Which results in:
 
 [!_chapter1.md]
 
+### Format-specific file insertion
+
+You can restrict an inline file insertion to a particular output format by prefixing the tag with
+`docx:`, `html:`, or `pdf:`. The file is included only when building that format; otherwise the
+tag is silently omitted. This is useful for sections such as copyright and license pages that
+should appear in Word output but not in HTML.
+
+`[docx:!_license.md]`
+
+For example, `[docx:!_license.md]` inserts `_license.md` at the base heading level only when
+building DOCX. Use `[html:file.md]` or `[pdf:file.md]` for other formats.
+
+### Appending sections from the command line
+
+Alternatively, pass one or more markdown files with the `--append` flag. Each file is preprocessed
+and appended after the main document, preceded by a page break. Missing append files are skipped
+without error.
+
+    build_docx.bat doc.md --append legal/copyright.md
+
+The `build_docx.bat` wrapper passes `--append _license.md` by default, so a `_license.md` file in
+the document directory is automatically appended to every DOCX build. Do not combine `--append
+_license.md` with `[docx:!_license.md]` in the same document, or the license section will appear
+twice.
+
 
 # Plugins
 

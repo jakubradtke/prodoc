@@ -473,7 +473,7 @@ class PandocPreproc(object):
         # User may also include a file glob if desired (*, ?).
         # If the user has defined the tag with a !, the heading level is reset (i.e., supplied
         # by the contained chapter)
-        self.token_specification.append(("INSERT_FILE", r"(?m)^\s*\[!?[\w\-\*\?\s\/\.]+.mm?d\]"))
+        self.token_specification.append(("INSERT_FILE", r"(?m)^\s*\[(?:(docx|html|pdf):)?!?[\w\-\*\?\s\/\.]+.mm?d\]"))
         self.token_specification.append(("HEADER", "(?m)^#+[^#]"))
 
         # Add code section (````<blah>```) as a token, to skip parsing opens/fixmes in them
@@ -534,10 +534,16 @@ class PandocPreproc(object):
         """
         Token parser for inline files
         """
-        fname = re.search(r"\[(.*)\]", token.value).group(1).replace("/", "\\")
-        no_hlevel = fname.startswith("!")
+        inner = re.search(r"\[(.*)\]", token.value).group(1).replace("/", "\\")
+        if re.match(r'^(docx|html|pdf):', inner):
+            fmt_cond, inner = inner.split(':', 1)
+            if fmt_cond != self.fmt:
+                return ""
+        no_hlevel = inner.startswith("!")
         if no_hlevel:
-            fname = fname[1:]
+            fname = inner[1:]
+        else:
+            fname = inner
         # Find the file
         fullpath = os.path.join(self.dirs[-1], fname)
 
@@ -841,6 +847,31 @@ def get_src_path(fn):
         deptree_conn.close()
     return cfg["repo_name"], relpath.replace('\\', '/')
 
+def append_preprocessed_sections(infile, append_files, doc_dir, fmt, outfile):
+    """
+    Append preprocessed markdown file(s) to the pandoc input, each preceded by a page break.
+    Missing append files are skipped silently (verbose mode prints a warning).
+    """
+    if not append_files:
+        return infile
+
+    with open(infile, 'a') as f:
+        for append_path in append_files:
+            if os.path.isabs(append_path):
+                append_abs = os.path.normpath(append_path)
+            else:
+                append_abs = os.path.normpath(os.path.join(doc_dir, append_path))
+            if not os.path.isfile(append_abs):
+                if g.opts.verbose:
+                    warn("Skipping --append file (not found): '%s'" % append_abs)
+                continue
+            log_dependency(outfile, append_abs)
+            append_preproc = PandocPreproc(append_abs, fmt=fmt)
+            f.write("\n\n\\newpage\n\n")
+            f.write(open(append_preproc.outf.name).read())
+
+    return infile
+
 def build_doc(opts):
     # Fixme - look into options for handling criticmarkup
     # Use glob to expand it
@@ -884,8 +915,16 @@ def build_doc(opts):
             preproc = PandocPreproc(fnabs, fmt=opts.fmt)
             infile = preproc.outf.name # tmp file in tmp directory
                                        # TODO: wouldn't hurt to clean up those tmp files from time to time
+        elif opts.append:
+            tmpf = _tempfile.TemporaryFile("w+b", delete=False)
+            tmpf.write(open(fnabs, "rb").read())
+            tmpf.close()
+            infile = tmpf.name
 
         dirname = os.path.dirname(fnabs)
+
+        if opts.append:
+            infile = append_preprocessed_sections(infile, opts.append, dirname, opts.fmt, outfile)
         assert dirname != ""
 
         # Add toolver and other variables
@@ -1556,6 +1595,8 @@ def setup_parser():
     parser.add_argument('--verbose', required=False, action="store_true", help='Output debugging information')
     parser.add_argument('--fast', required=False, action="store_true", default=False, help='Skip HSD-ES queries')
     parser.add_argument('--email', required=False, action="store_true", default=False, help='Send self an email with the document content')
+    parser.add_argument('--append', action='append', default=[], metavar='FILE',
+        help='Markdown file(s) to append after main document (preprocessed, with page break)')
 
     return parser
 
