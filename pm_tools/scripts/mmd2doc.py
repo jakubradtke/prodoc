@@ -392,6 +392,7 @@ class PandocPreproc(object):
             # Fall back to name-based match
             func = getattr(self, token.typ.lower())
         kwargs.update(div_style=div_style)
+        args = list(args)
         if len(args) == 0:
             args.append("empty")
         start_time = time.time()
