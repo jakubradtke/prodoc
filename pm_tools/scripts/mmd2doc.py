@@ -55,7 +55,7 @@ toolcfg = util.get_toolconfig()
 g.css_path = toolpath("stylesheets")
 g.font_awesome = toolpath("stylesheets/font-awesome/css/fa_pm_doc.css")
 g.liverefresh = toolpath("stylesheets/liverefresh.html")
-g.dotx = toolpath("stylesheets/reference.docx")
+g.dotx = toolpath("stylesheets/reference.dotx")
 g.batik = toolpath("batik/batik-rasterizer.jar")
 g.pandoc = toolpath("Pandoc/pandoc.exe")
 g.reveal_js = toolpath("reveal.js")
@@ -902,8 +902,8 @@ def build_doc(opts):
 
         # Call pandoc to render (pre-processed) markdown
         if (opts.fmt == "docx"):
-            # _call('"%s" %s -s "%s" -t docx --number-sections --reference-doc=%s -o "%s"' % (g.pandoc, variables, infile, g.dotx, cwd_outfile), cwd=dirname)
-            _call('"%s" %s -s "%s" -t docx --number-sections -o "%s"' % (g.pandoc, variables, infile, cwd_outfile), cwd=dirname)
+             _call('"%s" %s -s "%s" -t docx --number-sections --reference-doc=%s -o "%s"' % (g.pandoc, variables, infile, g.dotx, cwd_outfile), cwd=dirname)
+            #_call('"%s" %s -s "%s" -t docx --number-sections -o "%s"' % (g.pandoc, variables, infile, cwd_outfile), cwd=dirname)
 
         elif (opts.email):
             cmd = '"%s" "%s" -o "%s" %s'%(g.pandoc, infile, cwd_outfile, opts.pandoc_args)
