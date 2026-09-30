@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Documents repository</title>
+  <style>
+* { box-sizing: border-box; }
+html, body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f5f5f7;
+  color: #222;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.container {
+  width: 100%;
+  height: 100%;
+  padding: 24px 32px;
+  background: #fff;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+h1 {
+  margin-top: 0;
+  margin-bottom: 0.5em;
+}
+h2 {
+  margin-top: 0;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 0.25em;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+}
+ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 0.5em 0 0;
+}
+li {
+  margin: 0.25em 0;
+}
+a {
+  color: #0066cc;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+.columns-top, .columns-bottom {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 24px;
+}
+.column {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .columns-top, .columns-bottom {
+    flex-direction: column;
+    height: auto;
+  }
+}
+  </style>
+</head>
+
+<body>
+<div class="container">
+  <h1>Documents repository</h1>
+
+  <div class="columns-top">
+    <div class="column">
+      <h2>Architecture</h2>
+      <ul>
+        <li><a href="repo\src\Architecture\NOVMD\HLA\NOVMD_HLA.html">HLA: VROC No-VMD feature</a></li>
+        <li><a href="repo\src\Architecture\OOB\HLA\OOB_HLA.html">HLA: VROC OOB feature</a></li>
+        <li><a href="repo\src\Architecture\SED\HLA\SED_HLA.html">HLA: VROC SED feature</a></li>
+        <li><a href="repo\src\Architecture\OOB\RDE_responder\RDE_responder_architecture.html">RDE responder architecture</a></li>
+        <li><a href="repo\src\Architecture\SED\Design\SED_enhanced_design_proposal.html">SED Enhanced Design Proposal</a></li>
+        <li><a href="repo\src\Architecture\SAS\SAS.html">Software Architecture Specification (SAS)</a></li>
+        <li><a href="repo\src\Architecture\ThreatModel\ThreatModel.html">VROC Threat Model</a></li>
+      </ul>
+    </div>
+
+    <div class="column">
+      <h2>Interfaces</h2>
+      <ul>
+        <li><a href="repo\src\Interfaces\Device_Info_Protocol\Device_Info_Protocol.html">Device Info Protocol</a></li>
+        <li><a href="repo\src\Interfaces\FW_Management\FW_Management.html">Firmware Management Protocol</a></li>
+        <li><a href="repo\src\Interfaces\Physical_Location\Physical_Location.html">Physical Drive Location Protocol</a></li>
+        <li><a href="repo\src\Interfaces\SSCP\SSCP.html">Storage Security Command Protocol</a></li>
+        <li><a href="repo\src\Interfaces\IOCTL\IOCTL.html">VROC IOCTLs</a></li>
+        <li><a href="repo\src\Interfaces\SW_License_Protocol\SW_License_Protocol.html">VROC Software License Protocol</a></li>
+        <li><a href="repo\src\Interfaces\SSI\SSI.html">VROC Standard Storage Interface Specification</a></li>
+        <li><a href="repo\src\Interfaces\SSI\guid_generation_rules.html">SSI Generation Rules</a></li>
+        <li><a href="repo\src\Interfaces\Volume_Info\Volume_Info.html">Volume Info Protocol</a></li>
+        <li><a href="repo\src\Architecture\UefiSpecification\UefiSpecification.html">UEFI Specification</a></li>
+        <li><a href="repo\src\Interfaces\Vroc_Uefi_Config\Vroc_Uefi_Config.html">VROC UEFI Config</a></li>
+      </ul>
+    </div>
+
+    <div class="column">
+      <h2>Implementation</h2>
+      <ul>
+        <li><a href="repo\src\Implementation\26.H2\Rebranding\Rebranding_HLD.html">HLD: Rebranding to Graid VROC(TM)</a></li>
+        <li><a href="repo\src\Implementation\Legacy\RAID10_6D\RAID10_6D_HLD.html">HLD: Support RAID10 with more than four drives</a></li>
+        <li><a href="repo\src\Implementation\26.H2\GDS\gds-user-guidance.html">GDS on VROC: Deployment Guidance</a></li>
+        <li><a href="repo\src\Implementation\26.H2\Release\UefiPackage\UefiPackage.html">UEFI Release Package: VROC(TM) by Graid Technology Inc.</a></li>
+        <li><a href="repo\src\Implementation\Legacy\Release\UefiPackage.html">UEFI Release Package: Intel VROC 9.X UEFI Package</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="columns-bottom">
+    <div class="column">
+      <h2>Validation</h2>
+      <ul>
+        <li><a href="repo\src\Validation\Master_Test_Plans\26H2\Master Test Plan VROC by Graid Technology 26H2.html">Master Test Plan VROC by Graid Technology 26H2</a></li>
+        <li><a href="repo\src\Validation\Test_Specifications\26H2\Test Specification VROC by Graid Technology 26H2.html">Test Specification VROC by Graid Technology 26H2</a></li>
+        <li><a href="repo\src\Validation\Test_Specifications\26H2\Test Specification VROC by Graid Technology 26H2 - Linux.html">Test Specification VROC by Graid Technology 26H2 - Linux</a></li>
+        <li><a href="repo\src\Validation\Test_Specifications\26H2\Test Specification VROC by Graid Technology 26H2 - UEFI.html">Test Specification VROC by Graid Technology 26H2 - UEFI</a></li>
+        <li><a href="repo\src\Validation\Test_Specifications\26H2\Test Specification VROC by Graid Technology 26H2 - Windows.html">Test Specification VROC by Graid Technology 26H2 - Windows</a></li>
+      </ul>
+    </div>
+
+    <div class="column">
+      <h2>Pathfinding</h2>
+      <ul>
+	<li><a href="repo\src\Pathfinding\SupremeRAID_Metadata\Metadata_POC.html">POC records: Support SupremeRAID metadata</a></li>
+	<li><a href="repo\src\Pathfinding\NOVMD\NOVMD_POC.html">POC records: VROC No-VMD</a></li>
+	<li><a href="repo\src\Pathfinding\NOVMD\NOVMD_POC_OOB.html">POC records: VROC No-VMD - OOB</a></li>
+	<li><a href="repo\src\Pathfinding\NOVMD\NOVMD_POC_SED.html">POC records: VROC No-VMD - SED</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>
