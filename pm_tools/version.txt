@@ -1,3 +1,4 @@
-# Update version in this file to trigger documentation rebuild
+# prodoc version. Bump it together with the release git tag (vX.Y).
+# Changing it also triggers documentation rebuild.
 
-version = 5.7
+version = 1.6

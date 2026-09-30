@@ -14,6 +14,8 @@ The simplest method to install the framework is by using the provided Windows in
     * Path to the PRODOC root folder
 * PATH
     * Add PRODOC_HOME
+* PRODOC_JAVA (optional)
+    * Path to the JDK/JRE home directory. It overrides the Java found in the registry or PATH. PlantUML needs Java 11 or newer.
 
 ### Required dependencies
 * Java
@@ -54,3 +56,35 @@ Run from the cmd console:
     build.bat hello.md
 
 Above command should produce hello.html file
+
+## Index page
+
+`build_index.bat` generates a single-file `index.html` that links to built HTML documents. The page layout comes from an `index.json` file kept next to the documents:
+
+    {
+      "title": "Documents repository",
+      "max_columns_per_row": 3,
+      "columns": [
+        {
+          "title": "Architecture",
+          "sort": "title",
+          "documents": [
+            "Architecture/SAS/SAS.mmd",
+            {"path": "Architecture/HLA/HLA.mmd", "title": "High Level Architecture"},
+            "Validation/**/*.mmd"
+          ]
+        }
+      ]
+    }
+
+* Paths are relative to the JSON file. They point to the source (`.md`/`.mmd`); the link goes to the `.html` file with the same name. Paths to `.html` files work too.
+* Globs `*`, `?` and `**` are supported. Files starting with `_` and `auto/` directories are skipped.
+* Without an explicit `title`, the title comes from the YAML front matter `title`, then the first `#` heading, then the file name.
+* Documents whose `.html` is not built yet are skipped with a warning.
+* Optional keys: `output` (default `index.html`), `filter` (search box, default `true`), `show_dates` (last change date per document, default `true`), `date_source` (`git`, the default: date of the last commit that touched the source or any file it inserts with `[file.md]`, falling back to the HTML modification date outside git or for untracked files; `file`: HTML modification date), `max_columns_per_row`, and per column `sort` (`title` or `none`, the default JSON order).
+
+Build the documents first, then run:
+
+    build_index.bat [path\to\index.json] [-o output.html]
+
+Without arguments, `index.json` in the current directory is used. See `example/index.json`.

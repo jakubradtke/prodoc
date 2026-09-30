@@ -1,0 +1,18 @@
+{
+  "title": "pm_tools documentation",
+  "columns": [
+    {
+      "title": "Reference",
+      "documents": [
+        "example.mmd"
+      ]
+    },
+    {
+      "title": "Getting started",
+      "sort": "title",
+      "documents": [
+        "hello_world/*.md"
+      ]
+    }
+  ]
+}

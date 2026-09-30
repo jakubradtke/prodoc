@@ -335,6 +335,13 @@ def which(program):
     return None
 
 def locate_java():
+    # Explicit override: PRODOC_JAVA points to a JDK/JRE home directory
+    java_home = os.environ.get('PRODOC_JAVA')
+    if java_home:
+        java_exe = os.path.join(java_home, 'bin', 'java.exe')
+        if not os.path.isfile(java_exe):
+            raise Exception("PRODOC_JAVA is set, but %s does not exist" % java_exe)
+        return java_exe
     import _winreg as wr
     aReg = wr.ConnectRegistry(None, wr.HKEY_LOCAL_MACHINE)
     # http://stackoverflow.com/a/3930575/1924207
