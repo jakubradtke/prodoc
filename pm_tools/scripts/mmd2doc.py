@@ -56,6 +56,7 @@ g.css_path = toolpath("stylesheets")
 g.font_awesome = toolpath("stylesheets/font-awesome/css/fa_pm_doc.css")
 g.liverefresh = toolpath("stylesheets/liverefresh.html")
 g.dotx = toolpath("stylesheets/reference.dotx")
+g.compact_cells = toolpath("filters/compact_cells.lua")
 g.batik = toolpath("batik/batik-rasterizer.jar")
 g.pandoc = toolpath("Pandoc/pandoc.exe")
 g.reveal_js = toolpath("reveal.js")
@@ -235,7 +236,8 @@ class PandocPreproc(object):
         def svg_ref_to_png(mo):
             fnimg, title, div_style = g.svg_hash[mo.group(1)]
             fnpng = fnimg.replace(".svg", ".png")
-            _call("%s -jar %s -Xmx16G -m image/png -d \"%s\" \"%s\""%(g.java_exe, g.batik, os.path.dirname(fnpng), fnimg))
+            # -scriptSecurityOff: batik's script Security Manager is unsupported on Java 17+
+            _call("%s -jar %s -Xmx16G -scriptSecurityOff -m image/png -d \"%s\" \"%s\""%(g.java_exe, g.batik, os.path.dirname(fnpng), fnimg))
             relpath = os.path.relpath(fnpng, self.dirs[0]).replace('\\', '/')
             return "\n![%s](%s)\n" % (title, relpath)
         s = open(self.outf.name).read()
@@ -942,12 +944,13 @@ def build_doc(opts):
 
         # Call pandoc to render (pre-processed) markdown
         if (opts.fmt == "docx"):
-             _call('"%s" %s -s "%s" -t docx --number-sections --reference-doc=%s -o "%s"' % (g.pandoc, variables, infile, g.dotx, cwd_outfile), cwd=dirname)
+             _call('"%s" %s -s "%s" -t docx --number-sections --reference-doc=%s --lua-filter="%s" -o "%s"' % (g.pandoc, variables, infile, g.dotx, g.compact_cells, cwd_outfile), cwd=dirname)
             #_call('"%s" %s -s "%s" -t docx --number-sections -o "%s"' % (g.pandoc, variables, infile, cwd_outfile), cwd=dirname)
 
         elif (opts.email):
             cmd = '"%s" "%s" -o "%s" %s'%(g.pandoc, infile, cwd_outfile, opts.pandoc_args)
             cmd += ' --template "%s"'%g.email_template
+            cmd += ' --lua-filter="%s"' % g.compact_cells
             # FIXME: Formulas not currently supported
 
             _call(cmd, cwd=dirname)
@@ -959,6 +962,7 @@ def build_doc(opts):
 
             # Common always present options
             cmd += " --standalone --self-contained --section-divs"
+            cmd += ' --lua-filter="%s"' % g.compact_cells
 
             # Formula rendering
             cmd += ' --mathjax'
