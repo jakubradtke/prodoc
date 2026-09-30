@@ -94,7 +94,13 @@ def load_config(fname):
 
 
 def glob_to_regex(pattern):
-    """Translate a glob with *, ? and ** into a regex matched against '/'-separated paths."""
+    """Translate a glob with *, ? and ** into a regex matched against '/'-separated paths.
+    A trailing .md or .mmd matches both source extensions."""
+    tail = r"\Z"
+    for src_ext in SOURCE_EXTS:
+        if pattern.lower().endswith(src_ext):
+            pattern, tail = pattern[:-len(src_ext)], r"\.m?md\Z"
+            break
     out = ""
     i = 0
     while i < len(pattern):
@@ -113,7 +119,7 @@ def glob_to_regex(pattern):
         else:
             out += re.escape(pattern[i])
             i += 1
-    return re.compile(out + r"\Z", re.IGNORECASE)
+    return re.compile(out + tail, re.IGNORECASE)
 
 
 def expand_glob(root, pattern):
@@ -140,14 +146,18 @@ def expand_glob(root, pattern):
 
 
 def find_source(fname):
-    """Map an entry path to (source_or_None, html)."""
+    """Map an entry path to (source_or_None, html). A missing .md/.mmd source is
+    looked up under the other source extension, so the git date is still found."""
     base, ext = os.path.splitext(fname)
-    if ext.lower() == ".html":
-        for src_ext in SOURCE_EXTS:
-            if os.path.isfile(base + src_ext):
-                return base + src_ext, fname
-        return None, fname
-    return fname, util.replace_ext(fname, ".html")
+    html = base + ".html"
+    if ext.lower() not in SOURCE_EXTS + (".html",):
+        return fname, util.replace_ext(fname, ".html")
+    if ext.lower() in SOURCE_EXTS and os.path.isfile(fname):
+        return fname, html
+    for src_ext in SOURCE_EXTS:
+        if os.path.isfile(base + src_ext):
+            return base + src_ext, html
+    return None, html
 
 
 def resolve_title(src, html):

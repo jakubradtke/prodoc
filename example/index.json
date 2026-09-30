@@ -6,56 +6,56 @@
     {
       "title": "Architecture",
       "documents": [
-        {"path": "repo/src/Architecture/NOVMD/HLA/NOVMD_HLA.mmd", "title": "HLA: VROC No-VMD feature"},
-        {"path": "repo/src/Architecture/OOB/HLA/OOB_HLA.mmd", "title": "HLA: VROC OOB feature"},
-        {"path": "repo/src/Architecture/SED/HLA/SED_HLA.mmd", "title": "HLA: VROC SED feature"},
+        {"path": "repo/src/Architecture/NOVMD/HLA/NOVMD_HLA.md", "title": "HLA: VROC No-VMD feature"},
+        {"path": "repo/src/Architecture/OOB/HLA/OOB_HLA.md", "title": "HLA: VROC OOB feature"},
+        {"path": "repo/src/Architecture/SED/HLA/SED_HLA.md", "title": "HLA: VROC SED feature"},
         {"path": "repo/src/Architecture/OOB/RDE_responder/RDE_responder_architecture.mmd", "title": "RDE responder architecture"},
         {"path": "repo/src/Architecture/SED/Design/SED_enhanced_design_proposal.mmd", "title": "SED Enhanced Design Proposal"},
         {"path": "repo/src/Architecture/SAS/SAS.mmd", "title": "Software Architecture Specification (SAS)"},
-        {"path": "repo/src/Architecture/ThreatModel/ThreatModel.mmd", "title": "VROC Threat Model"}
+        {"path": "repo/src/Architecture/ThreatModel/ThreatModel.md", "title": "VROC Threat Model"}
       ]
     },
     {
       "title": "Interfaces",
       "documents": [
-        {"path": "repo/src/Interfaces/Device_Info_Protocol/Device_Info_Protocol.mmd", "title": "Device Info Protocol"},
-        {"path": "repo/src/Interfaces/FW_Management/FW_Management.mmd", "title": "Firmware Management Protocol"},
-        {"path": "repo/src/Interfaces/Physical_Location/Physical_Location.mmd", "title": "Physical Drive Location Protocol"},
-        {"path": "repo/src/Interfaces/SSCP/SSCP.mmd", "title": "Storage Security Command Protocol"},
+        {"path": "repo/src/Interfaces/Device_Info_Protocol/Device_Info_Protocol.md", "title": "Device Info Protocol"},
+        {"path": "repo/src/Interfaces/FW_Management/FW_Management.md", "title": "Firmware Management Protocol"},
+        {"path": "repo/src/Interfaces/Physical_Location/Physical_Location.md", "title": "Physical Drive Location Protocol"},
+        {"path": "repo/src/Interfaces/SSCP/SSCP.md", "title": "Storage Security Command Protocol"},
         {"path": "repo/src/Interfaces/IOCTL/IOCTL.mmd", "title": "VROC IOCTLs"},
         {"path": "repo/src/Interfaces/SW_License_Protocol/SW_License_Protocol.mmd", "title": "VROC Software License Protocol"},
-        {"path": "repo/src/Interfaces/SSI/SSI.mmd", "title": "VROC Standard Storage Interface Specification"},
-        {"path": "repo/src/Interfaces/SSI/guid_generation_rules.mmd", "title": "SSI Generation Rules"},
-        {"path": "repo/src/Interfaces/Volume_Info/Volume_Info.mmd", "title": "Volume Info Protocol"},
-        {"path": "repo/src/Architecture/UefiSpecification/UefiSpecification.mmd", "title": "UEFI Specification"},
-        {"path": "repo/src/Interfaces/Vroc_Uefi_Config/Vroc_Uefi_Config.mmd", "title": "VROC UEFI Config"}
+        {"path": "repo/src/Interfaces/SSI/SSI.md", "title": "VROC Standard Storage Interface Specification"},
+        {"path": "repo/src/Interfaces/SSI/guid_generation_rules.md", "title": "SSI Generation Rules"},
+        {"path": "repo/src/Interfaces/Volume_Info/Volume_Info.md", "title": "Volume Info Protocol"},
+        {"path": "repo/src/Architecture/UefiSpecification/UefiSpecification.md", "title": "UEFI Specification"},
+        {"path": "repo/src/Interfaces/Vroc_Uefi_Config/Vroc_Uefi_Config.md", "title": "VROC UEFI Config"}
       ]
     },
     {
       "title": "Implementation",
       "documents": [
-        {"path": "repo/src/Implementation/26.H2/Rebranding/Rebranding_HLD.mmd", "title": "HLD: Rebranding to Graid VROC(TM)"},
-        {"path": "repo/src/Implementation/Legacy/RAID10_6D/RAID10_6D_HLD.mmd", "title": "HLD: Support RAID10 with more than four drives"},
-        {"path": "repo/src/Implementation/26.H2/GDS/gds-user-guidance.mmd", "title": "GDS on VROC: Deployment Guidance"},
-        {"path": "repo/src/Implementation/26.H2/Release/UefiPackage/UefiPackage.mmd", "title": "UEFI Release Package: VROC(TM) by Graid Technology Inc."},
-        {"path": "repo/src/Implementation/Legacy/Release/UefiPackage.mmd", "title": "UEFI Release Package: Intel VROC 9.X UEFI Package"}
+        {"path": "repo/src/Implementation/26.H2/Rebranding/Rebranding_HLD.md", "title": "HLD: Rebranding to Graid VROC(TM)"},
+        {"path": "repo/src/Implementation/Legacy/RAID10_6D/RAID10_6D_HLD.md", "title": "HLD: Support RAID10 with more than four drives"},
+        {"path": "repo/src/Implementation/26.H2/GDS/gds-user-guidance.md", "title": "GDS on VROC: Deployment Guidance"},
+        {"path": "repo/src/Implementation/26.H2/Release/UefiPackage/UefiPackage.md", "title": "UEFI Release Package: VROC(TM) by Graid Technology Inc."},
+        {"path": "repo/src/Implementation/Legacy/Release/UefiPackage.md", "title": "UEFI Release Package: Intel VROC 9.X UEFI Package"}
       ]
     },
     {
       "title": "Validation",
       "sort": "title",
       "documents": [
-        "repo/src/Validation/Master_Test_Plans/26H2/*.mmd",
-        "repo/src/Validation/Test_Specifications/26H2/*.mmd"
+        "repo/src/Validation/Master_Test_Plans/26H2/*.md",
+        "repo/src/Validation/Test_Specifications/26H2/*.md"
       ]
     },
     {
       "title": "Pathfinding",
       "documents": [
-        {"path": "repo/src/Pathfinding/SupremeRAID_Metadata/Metadata_POC.mmd", "title": "POC records: Support SupremeRAID metadata"},
-        {"path": "repo/src/Pathfinding/NOVMD/NOVMD_POC.mmd", "title": "POC records: VROC No-VMD"},
-        {"path": "repo/src/Pathfinding/NOVMD/NOVMD_POC_OOB.mmd", "title": "POC records: VROC No-VMD - OOB"},
-        {"path": "repo/src/Pathfinding/NOVMD/NOVMD_POC_SED.mmd", "title": "POC records: VROC No-VMD - SED"}
+        {"path": "repo/src/Pathfinding/SupremeRAID_Metadata/Metadata_POC.md", "title": "POC records: Support SupremeRAID metadata"},
+        {"path": "repo/src/Pathfinding/NOVMD/NOVMD_POC.md", "title": "POC records: VROC No-VMD"},
+        {"path": "repo/src/Pathfinding/NOVMD/NOVMD_POC_OOB.md", "title": "POC records: VROC No-VMD - OOB"},
+        {"path": "repo/src/Pathfinding/NOVMD/NOVMD_POC_SED.md", "title": "POC records: VROC No-VMD - SED"}
       ]
     }
   ]
