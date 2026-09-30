@@ -9,6 +9,7 @@ JSON format (paths are relative to the JSON file):
   "output": "index.html",                # optional
   "filter": true,                        # optional, adds a search box
   "show_dates": true,                    # optional, shows last change date per document
+  "mark_new": true,                      # optional, "new" badge for documents changed today
   "date_source": "git",                  # optional: "git" (last commit of source + inserted
                                          #   files, falls back to "file") or "file" (HTML mtime)
   "max_columns_per_row": 3,              # optional, grid auto-fits when omitted
@@ -255,7 +256,9 @@ def render(cfg, columns, out_dir):
     title = esc(cfg.get("title", "Documents repository"))
     use_filter = cfg.get("filter", True)
     show_dates = cfg.get("show_dates", True)
+    mark_new = cfg.get("mark_new", True)
     max_cols = cfg.get("max_columns_per_row")
+    today = time.strftime("%Y-%m-%d")
 
     out = [
         u'<!DOCTYPE html>',
@@ -277,12 +280,14 @@ def render(cfg, columns, out_dir):
         out.append(u'<section><h2>%s</h2><ul>' % esc(col["title"]))
         for d in docs:
             item = u'<li><a href="%s">%s</a>' % (make_href(d["html"], out_dir), esc(d["title"]))
+            if mark_new and d["date"] == today:
+                item += u'<span class="new">new</span>'
             if show_dates:
                 item += u'<time>%s</time>' % d["date"]
             out.append(item + u'</li>')
         out.append(u'</ul></section>')
     out.append(u'</main>')
-    out.append(u'<footer>Generated %s &middot; prodoc %s</footer>' % (time.strftime("%Y-%m-%d"), util.get_toolver()))
+    out.append(u'<footer>Generated %s &middot; prodoc %s</footer>' % (today, util.get_toolver()))
     if use_filter:
         out.append(u'<script>%s</script>' % read_text(JS_FILE).strip())
     out.append(u'</body>')
@@ -305,8 +310,9 @@ def main():
         os.path.normpath(os.path.join(root, cfg.get("output", "index.html")))
     out_dir = os.path.dirname(out_file)
 
-    # Skip git lookups when dates are not displayed
-    date_source = cfg.get("date_source", "git") if cfg.get("show_dates", True) else "file"
+    # Skip git lookups when dates are neither displayed nor used for the "new" badge
+    needs_dates = cfg.get("show_dates", True) or cfg.get("mark_new", True)
+    date_source = cfg.get("date_source", "git") if needs_dates else "file"
     columns = []
     for col in cfg["columns"]:
         docs = collect_documents(col, root, out_file, date_source)

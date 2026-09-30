@@ -9,6 +9,7 @@ ul{margin:.5em 0 0;padding-left:1.5rem}
 li{margin:.25em 0}
 a{color:#0066cc;text-decoration:none}
 a:hover{text-decoration:underline}
+.new{margin-left:.5em;padding:0 .4em;border-radius:3px;font-size:.75em;font-weight:600;text-transform:uppercase;color:#fff;background:#2e7d32;vertical-align:middle}
 time{margin-left:.5em;font-size:.85em;color:#888;white-space:nowrap}
 footer{margin-top:32px;font-size:.85em;color:#888}
 [hidden]{display:none}

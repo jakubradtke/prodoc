@@ -81,7 +81,7 @@ Above command should produce hello.html file
 * Globs `*`, `?` and `**` are supported. Files starting with `_` and `auto/` directories are skipped.
 * Without an explicit `title`, the title comes from the YAML front matter `title`, then the first `#` heading, then the file name.
 * Documents whose `.html` is not built yet are skipped with a warning.
-* Optional keys: `output` (default `index.html`), `filter` (search box, default `true`), `show_dates` (last change date per document, default `true`), `date_source` (`git`, the default: date of the last commit that touched the source or any file it inserts with `[file.md]`, falling back to the HTML modification date outside git or for untracked files; `file`: HTML modification date), `max_columns_per_row`, and per column `sort` (`title` or `none`, the default JSON order).
+* Optional keys: `output` (default `index.html`), `filter` (search box, default `true`), `show_dates` (last change date per document, default `true`), `mark_new` ("new" badge for documents whose last change date is the day the index is generated, default `true`), `date_source` (`git`, the default: date of the last commit that touched the source or any file it inserts with `[file.md]`, falling back to the HTML modification date outside git or for untracked files; `file`: HTML modification date), `max_columns_per_row`, and per column `sort` (`title` or `none`, the default JSON order).
 
 Build the documents first, then run:
 
