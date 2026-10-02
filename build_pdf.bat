@@ -1,4 +1,4 @@
-rem @echo off
-
-call %PRODOC_PYTHON%\python.exe %PRODOC_HOME%\pm_tools\scripts\mmd2doc.py --fmt pdf %*
-exit /b
+@echo off
+rem Build documents as PDF: build_pdf.bat [mmd2doc options] file.md ...
+call "%~dp0build.bat" --fmt pdf %*
+exit /b %ERRORLEVEL%

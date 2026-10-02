@@ -1075,7 +1075,12 @@ def build_doc(opts):
                 pdf_footer_link = "file:///" + os.path.abspath(g.pdf_footer).replace("\\", "/")
                 # javascript-delay 25000 needed to make sure wkhtmltopdf doesn't cut off
                 # mathjax and other javascript in the middle
+                pdf_start = time.time()
                 _call('"%s" --javascript-delay 25000 --footer-html "%s" --margin-bottom 15mm --margin-top 15mm --print-media-type "%s" "%s"' % (g.wkhtmltopdf, pdf_footer_link, outfile, pdf_file), errors_are_warnings=True)
+                # wkhtmltopdf errors are only warnings above, and it may crash without output
+                # (e.g. on MathJax over HTTPS), so check that a fresh PDF really exists
+                if not os.path.isfile(pdf_file) or os.path.getmtime(pdf_file) < pdf_start - 1:
+                    error("PDF not created: %s (wkhtmltopdf failed; documents with math/MathJax are a known cause)" % pdf_file)
 
                 # And go ahead and remove the source html file when done
                 #os.remove(outfile)

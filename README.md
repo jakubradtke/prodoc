@@ -57,6 +57,16 @@ Run from the cmd console:
 
 Above command should produce hello.html file
 
+## Building many documents
+
+    build_all.bat [html|docx|pdf] [folder]
+    build_docx_all.bat [folder]
+    build_pdf_all.bat [folder]
+
+* Builds every `*.md` and `*.mmd` under the folder (default: current folder), except chapters whose name starts with `_` and files in `auto\` folders.
+* Prints the failed documents at the end and returns exit code `1` when any document failed (`0` = all built, `2` = folder not found), so scheduled scripts can detect problems.
+* `build_pdf.bat` reports `PDF not created` and fails when wkhtmltopdf did not produce a PDF, instead of failing silently.
+
 ## Index page
 
 `build_index.bat` generates a single-file `index.html` that links to built HTML documents. The page layout comes from an `index.json` file kept next to the documents:

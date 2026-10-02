@@ -1,1 +1,2 @@
 pm_tools/Pandoc/pandoc.exe filter=lfs diff=lfs merge=lfs -text
+*.bat text eol=crlf
