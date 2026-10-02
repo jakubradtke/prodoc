@@ -14,6 +14,7 @@ JSON format (paths are relative to the JSON file):
   "recent": 8,                           # optional, size of the "Recently updated" list, 0 = off
   "show_formats": true,                  # optional, small pdf/docx links when those files exist
   "update_every_min": 30,                # optional, footer note "Updated every N minutes" (default 30, 0 = off)
+  "search": true,                        # optional, content search; writes <output>-search.js next to the page
   "show_repo_commit": true,              # optional, footer shows branch/commit of the documents repo
   "date_source": "git",                  # optional: "git" (last commit of source + inserted
                                          #   files, falls back to "file") or "file" (HTML mtime)
@@ -349,7 +350,7 @@ def collect_documents(col, root, out_file, date_source):
     return docs
 
 
-def render(cfg, columns, out_dir):
+def render(cfg, columns, out_dir, search_src=None):
     esc = lambda s: cgi.escape(s, True)
     title = esc(cfg.get("title", "Documents repository"))
     use_filter = cfg.get("filter", True)
@@ -396,8 +397,17 @@ def render(cfg, columns, out_dir):
     ]
     if use_filter:
         out.append(u'<span id="filter-count"></span>')
-        out.append(u'<input id="filter" type="search" placeholder="Filter documents (press /)" title="Press / to focus, Esc to clear" aria-label="Filter documents">')
+        out.append(u'<input id="filter" type="search" placeholder="Filter titles (press /)" title="Press / to focus, Esc to clear" aria-label="Filter document titles">')
+        if search_src:
+            # Version in the URL so browsers do not keep an old search index from cache
+            out.append(u'<input id="content-search" type="search" placeholder="Search content (press \\)" '
+                       u'title="Press \\ to focus, Esc to clear" aria-label="Search document content" data-search="%s?v=%s">'
+                       % (esc(urllib.quote(search_src.encode("utf-8"))), time.strftime("%Y%m%d%H%M%S")))
+            out.append(u'<label class="match-case" title="Case-sensitive content search">'
+                       u'<input id="match-case" type="checkbox"> Match case</label>')
     out.append(u'</header>')
+    if search_src:
+        out.append(u'<div id="content-results" hidden><h2></h2><ul></ul></div>')
 
     if recent_count > 0:
         # Most recently changed documents across all columns (each document once)
@@ -449,6 +459,59 @@ def render(cfg, columns, out_dir):
     return u"\n".join(out) + u"\n"
 
 
+SECTION_RE = re.compile(r'<section\b[^>]*\bid="([^"]+)"[^>]*>', re.I)
+HEADING_RE = re.compile(r'<h[1-6]\b[^>]*>(.*?)</h[1-6]>', re.I | re.S)
+NOISE_RE = re.compile(r'<(script|style|svg|head)\b.*?</\1>|<img\b[^>]*>', re.I | re.S)
+TAG_RE = re.compile(r'<[^>]+>')
+_unescape = __import__("HTMLParser").HTMLParser().unescape
+
+
+def html_text(fragment):
+    return u" ".join(_unescape(TAG_RE.sub(u" ", fragment)).split())
+
+
+def extract_sections(html):
+    """[(section id, heading, own text)] of a pandoc HTML document (--section-divs).
+    Text of a section stops at the next <section>, so subsections are separate entries;
+    page chrome outside sections (sidebar, forms) is ignored."""
+    s = NOISE_RE.sub(u" ", read_text(html))
+    marks = list(SECTION_RE.finditer(s))
+    out = []
+    for i, m in enumerate(marks):
+        # Only pandoc chapters (class="levelN"); other sections (feedback form, sidebar)
+        # still end the previous chapter but are not indexed
+        if not re.search(r'class="[^"]*\blevel\d', m.group(0)):
+            continue
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(s)
+        chunk = s[m.end():end]
+        h = HEADING_RE.search(chunk)
+        heading = html_text(h.group(1)) if h else u""
+        text = html_text(chunk[h.end():] if h else chunk)
+        if heading or text:
+            out.append((m.group(1), heading, text))
+    return out
+
+
+def write_search_index(path, columns, out_dir):
+    """Write <output>-search.js: section texts of all documents for the content search in index.js."""
+    docs, entries, seen = [], [], {}
+    for _, col_docs in columns:
+        for d in col_docs:
+            key = os.path.normcase(d["html"])
+            if key in seen:
+                continue
+            seen[key] = len(docs)
+            href = make_href(d["html"], out_dir)
+            docs.append([d["title"], href])
+            for sid, heading, text in extract_sections(d["html"]):
+                entries.append([seen[key], sid, heading, text])
+    data = json.dumps({"docs": docs, "s": entries}, ensure_ascii=False, separators=(",", ":"))
+    if isinstance(data, str):
+        data = data.decode("utf-8")
+    write_atomic(path, u"window.PRODOC_SEARCH=%s;\n" % data)
+    return len(docs), len(entries)
+
+
 def write_atomic(path, text):
     """Write to a temporary file, then replace path in one step, so a web server
     never serves a half-written page."""
@@ -498,7 +561,14 @@ def main():
         fail(u"no documents found. Paths in %s are relative to its folder (%s); "
              u"put the JSON in the folder its paths start from (e.g. the web root) and run it there. "
              u"Output not written." % (os.path.basename(json_file), root))
-    write_atomic(out_file, render(cfg, columns, out_dir))
+    search_src = None
+    if cfg.get("search", True) and cfg.get("filter", True):
+        # Content search data next to the page; loaded by index.js only when used
+        search_file = os.path.splitext(out_file)[0] + "-search.js"
+        n_docs, n_sections = write_search_index(search_file, columns, out_dir)
+        search_src = os.path.basename(search_file)
+        print console(u"Search index %s (%d documents, %d sections)" % (search_file, n_docs, n_sections))
+    write_atomic(out_file, render(cfg, columns, out_dir, search_src))
     print console(u"Generated %s (%d documents)" % (out_file, sum(len(d) for _, d in columns)))
 
 

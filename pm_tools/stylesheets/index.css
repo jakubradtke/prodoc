@@ -3,10 +3,16 @@ body{margin:0;padding:24px 32px;font:14px/1.5 system-ui,-apple-system,"Segoe UI"
 header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 24px;margin-bottom:24px}
 h1{margin:0;font-size:1.6rem}
 #filter-count{margin-left:auto;font-size:.85em;color:#888}
-#filter{padding:4px 8px;min-width:16rem;font:inherit;border:1px solid #ccc;border-radius:4px}
+#filter,#content-search{padding:4px 8px;min-width:16rem;font:inherit;border:1px solid #ccc;border-radius:4px}
+.match-case{margin-left:-16px;font-size:.85em;color:#555;white-space:nowrap;cursor:pointer}
+.match-case input{vertical-align:middle;margin:0 2px 0 0}
 #recent{margin-bottom:28px;padding:12px 16px;background:#f7f9fc;border:1px solid #e3e8f0;border-radius:6px}
 #recent ul{columns:2 28rem;column-gap:32px}
 #recent li{break-inside:avoid}
+#content-results{margin-bottom:28px;padding:12px 16px;border:1px solid #e3e8f0;border-radius:6px}
+#content-results li{margin:.5em 0}
+#content-results .snip{font-size:.85em;color:#555}
+mark{background:#fff3a6;color:inherit;padding:0 1px}
 main{display:grid;gap:24px 32px;grid-template-columns:repeat(auto-fill,minmax(max(18rem,calc((100% - (var(--max-cols,99) - 1) * 32px) / var(--max-cols,99))),1fr))}
 h2{margin:0;padding-bottom:.25em;border-bottom:1px solid #eee;font-size:.9rem;text-transform:uppercase;letter-spacing:.05em;color:#555}
 ul{margin:.5em 0 0;padding-left:1.5rem}
