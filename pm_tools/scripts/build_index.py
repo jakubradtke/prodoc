@@ -11,7 +11,10 @@ JSON format (paths are relative to the JSON file):
   "show_dates": true,                    # optional, shows last change date per document
   "mark_new": true,                      # optional, "new" badge for recently changed documents
   "new_days": 2,                         # optional, "new" = changed today or in the last N-1 days
-  "recent": 8,                           # optional, size of the "Recently updated" list, 0 = off  "show_formats": true,                  # optional, small pdf/docx links when those files exist
+  "recent": 8,                           # optional, size of the "Recently updated" list, 0 = off
+  "show_formats": true,                  # optional, small pdf/docx links when those files exist
+  "update_every_min": 30,                # optional, footer note "Updated every N minutes" (default 30, 0 = off)
+  "show_repo_commit": true,              # optional, footer shows branch/commit of the documents repo
   "date_source": "git",                  # optional: "git" (last commit of source + inserted
                                          #   files, falls back to "file") or "file" (HTML mtime)
   "max_columns_per_row": 3,              # optional, grid auto-fits when omitted
@@ -205,26 +208,97 @@ def collect_sources(src, found):
             collect_sources(fname, found)
 
 
+GIT_CANDIDATES = [
+    r"C:\Program Files\Git\cmd\git.exe",
+    r"C:\Tools\cmder\vendor\git-for-windows\cmd\git.exe",
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Git", "cmd", "git.exe"),
+]
+_git = {"exe": None, "warned": False}
+
+
+def git_exe():
+    """git executable: PRODOC_GIT, then PATH, then common install folders."""
+    if _git["exe"] is None:
+        found = os.environ.get("PRODOC_GIT") or ""
+        if not os.path.isfile(found):
+            found = ""
+            for d in os.environ.get("PATH", "").split(os.pathsep):
+                cand = os.path.join(d.strip('"'), "git.exe")
+                if os.path.isfile(cand):
+                    found = cand
+                    break
+        if not found:
+            found = next((c for c in GIT_CANDIDATES if os.path.isfile(c)), "")
+        _git["exe"] = found
+    return _git["exe"]
+
+
+def git_out(cwd, *args):
+    """stdout of a git command run in cwd (unicode), or None on failure.
+    The first failure is reported, because dates then fall back to the HTML file time."""
+    fsenc = sys.getfilesystemencoding()
+    exe = git_exe()
+    if not exe:
+        if not _git["warned"]:
+            warn(u"git not found (set PRODOC_GIT or add git to PATH): dates use HTML file time, no NEW badges")
+            _git["warned"] = True
+        return None
+    cmd = [exe] + list(args)
+    try:
+        out = subprocess.check_output([c.encode(fsenc) if isinstance(c, unicode) else c for c in cmd],
+                                      cwd=cwd.encode(fsenc), stderr=subprocess.STDOUT)
+    except (OSError, subprocess.CalledProcessError) as e:
+        if not _git["warned"]:
+            detail = getattr(e, "output", None) or str(e)
+            if isinstance(detail, str):
+                detail = detail.decode("utf-8", "replace")
+            warn(u"git failed in %s: %s" % (cwd, detail.strip().splitlines()[0] if detail.strip() else e))
+            _git["warned"] = True
+        return None
+    return out.decode("utf-8", "replace").strip()
+
+
 def git_last_commit(files):
     """(timestamp, author, subject) of the last commit touching any of files, or None."""
     cwd = os.path.dirname(files[0])
-    fsenc = sys.getfilesystemencoding()
-    cmd = ["git", "log", "-1", "--format=%ct%x1f%an%x1f%s", "--"] + \
-        [os.path.relpath(f, cwd) for f in files]
-    try:
-        out = subprocess.check_output([c.encode(fsenc) for c in cmd], cwd=cwd.encode(fsenc),
-                                      stderr=subprocess.STDOUT)
-    except (OSError, subprocess.CalledProcessError):
+    out = git_out(cwd, "log", "-1", "--format=%ct%x1f%an%x1f%s", "--",
+                  *[os.path.relpath(f, cwd) for f in files])
+    if not out:
         return None
-    fields = out.decode("utf-8", "replace").strip().split(u"\x1f")
+    fields = out.split(u"\x1f")
     if len(fields) != 3 or not fields[0].isdigit():
         return None
     return int(fields[0]), fields[1], fields[2]
 
 
+_repo_cache = {}
+
+
+def repo_root(path):
+    """Git work tree root containing path (cached per folder), or None."""
+    folder = os.path.dirname(path)
+    if folder not in _repo_cache:
+        top = git_out(folder, "rev-parse", "--show-toplevel")
+        _repo_cache[folder] = os.path.normcase(os.path.normpath(top)) if top else None
+    return _repo_cache[folder]
+
+
+def repo_commit(root):
+    """Current commit of a documents repository: dict for the page footer, or None."""
+    out = git_out(root, "log", "-1", "--format=%h%x1f%cd%x1f%an%x1f%s", "--date=format:%Y-%m-%d %H:%M")
+    if not out or out.count(u"\x1f") != 3:
+        return None
+    short, date, author, subject = out.split(u"\x1f")
+    return {
+        "name": os.path.basename(root),
+        "branch": git_out(root, "rev-parse", "--abbrev-ref", "HEAD") or u"?",
+        "short": short, "date": date, "author": author, "subject": subject,
+    }
+
+
 def document_change(src, html, date_source):
-    """(timestamp, tooltip) of the last change: git history of the source and its
-    inserted files, else HTML mtime (tooltip is then empty)."""
+    """(timestamp, tooltip, from_git) of the last change: git history of the source and
+    its inserted files, else HTML mtime (tooltip is then empty)."""
     if date_source == "git" and src:
         found = {}
         collect_sources(src, found)
@@ -232,8 +306,8 @@ def document_change(src, html, date_source):
             commit = git_last_commit(sorted(found.values()))
             if commit:
                 ts, author, subject = commit
-                return ts, u"%s: %s" % (author, subject)
-    return int(os.path.getmtime(html)), u""
+                return ts, u"%s: %s" % (author, subject), True
+    return int(os.path.getmtime(html)), u"", False
 
 
 def collect_documents(col, root, out_file, date_source):
@@ -259,13 +333,16 @@ def collect_documents(col, root, out_file, date_source):
             if not os.path.isfile(html):
                 warn("column '%s': %s not built, skipped" % (col["title"], os.path.relpath(html, root)))
                 continue
-            ts, tooltip = document_change(src, html, date_source)
+            ts, tooltip, from_git = document_change(src, html, date_source)
             docs.append({
                 "title": title or resolve_title(src, html),
                 "html": html,
                 "ts": ts,
                 "date": time.strftime("%Y-%m-%d", time.localtime(ts)),
                 "tooltip": tooltip,
+                # HTML file time after a rebuild is always "today": not a reason for NEW
+                "dated_by_git": from_git or date_source != "git",
+                "repo": repo_root(src or html),
             })
     if col.get("sort") == "title":
         docs.sort(key=lambda d: d["title"].lower())
@@ -289,7 +366,7 @@ def render(cfg, columns, out_dir):
     def render_item(d, column_title=None):
         # HTML and PDF open in a new tab; docx is a download, so it keeps the default
         item = u'<li><a href="%s" target="_blank" rel="noopener">%s</a>' % (make_href(d["html"], out_dir), esc(d["title"]))
-        if mark_new and d["date"] >= new_since:
+        if mark_new and d["dated_by_git"] and d["date"] >= new_since:
             item += u'<span class="new">new</span>'
         if show_dates:
             tip = u' title="%s"' % esc(d["tooltip"]) if d["tooltip"] else u""
@@ -344,7 +421,27 @@ def render(cfg, columns, out_dir):
             out.append(render_item(d))
         out.append(u'</ul></section>')
     out.append(u'</main>')
-    out.append(u'<footer>Generated %s &middot; prodoc %s</footer>' % (generated, util.get_toolver()))
+    footer = [u'Generated %s' % generated]
+    # The production index is rebuilt by a scheduled task every 30 minutes
+    update_every = int(cfg.get("update_every_min", 30))
+    if update_every > 0:
+        footer.append(u'Updated every %d minutes' % update_every)
+    footer.append(u'prodoc %s' % util.get_toolver())
+    lines = [u' &middot; '.join(footer)]
+    if cfg.get("show_repo_commit", True):
+        # Commit of each documents repository the index links to, one line each
+        roots = []
+        for _, docs in columns:
+            for d in docs:
+                if d["repo"] and d["repo"] not in roots:
+                    roots.append(d["repo"])
+        for root in roots:
+            c = repo_commit(root)
+            if c:
+                lines.append(u'Documents: <span class="repo" title="%s">%s @ %s %s (%s)</span>' % (
+                    esc(u"%s: %s" % (c["author"], c["subject"])), esc(c["name"]), esc(c["branch"]),
+                    esc(c["short"]), esc(c["date"])))
+    out.append(u'<footer>%s</footer>' % u''.join(u'<div>%s</div>' % l for l in lines))
     if use_filter:
         out.append(u'<script>%s</script>' % read_text(JS_FILE).strip())
     out.append(u'</body>')
@@ -396,6 +493,11 @@ def main():
         else:
             warn("column '%s' has no documents, skipped" % col["title"])
 
+    if not columns:
+        # Typical mistake: a JSON with web-root paths ("repo/src/...") run from another folder
+        fail(u"no documents found. Paths in %s are relative to its folder (%s); "
+             u"put the JSON in the folder its paths start from (e.g. the web root) and run it there. "
+             u"Output not written." % (os.path.basename(json_file), root))
     write_atomic(out_file, render(cfg, columns, out_dir))
     print console(u"Generated %s (%d documents)" % (out_file, sum(len(d) for _, d in columns)))
 

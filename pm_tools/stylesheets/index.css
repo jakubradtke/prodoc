@@ -20,4 +20,5 @@ time{margin-left:.5em;font-size:.85em;color:#888;white-space:nowrap}
 time[title]{cursor:help;border-bottom:1px dotted #bbb}
 .col{margin-left:.5em;font-size:.8em;color:#999}
 footer{margin-top:32px;font-size:.85em;color:#888}
+footer .repo{cursor:help;border-bottom:1px dotted #bbb}
 [hidden]{display:none}
