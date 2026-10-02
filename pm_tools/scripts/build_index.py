@@ -9,7 +9,9 @@ JSON format (paths are relative to the JSON file):
   "output": "index.html",                # optional
   "filter": true,                        # optional, adds a search box
   "show_dates": true,                    # optional, shows last change date per document
-  "mark_new": true,                      # optional, "new" badge for documents changed today
+  "mark_new": true,                      # optional, "new" badge for recently changed documents
+  "new_days": 2,                         # optional, "new" = changed today or in the last N-1 days
+  "recent": 8,                           # optional, size of the "Recently updated" list, 0 = off  "show_formats": true,                  # optional, small pdf/docx links when those files exist
   "date_source": "git",                  # optional: "git" (last commit of source + inserted
                                          #   files, falls back to "file") or "file" (HTML mtime)
   "max_columns_per_row": 3,              # optional, grid auto-fits when omitted
@@ -162,6 +164,7 @@ def find_source(fname):
 
 def resolve_title(src, html):
     """Title from YAML front matter, then first '# ' heading, then file name."""
+    title = None
     if src and os.path.isfile(src):
         text = read_text(src)
         # Leading blank lines before the front matter are accepted by pandoc too
@@ -172,12 +175,13 @@ def resolve_title(src, html):
             except yaml.YAMLError:
                 data = None
             if isinstance(data, dict) and data.get("title"):
-                return unicode(data["title"]).strip()
+                title = unicode(data["title"]).strip()
             text = text[m.end():]
-        m = re.search(r"(?m)^#[ \t]+(.+?)[ \t#]*$", text)
-        if m:
-            return m.group(1)
-    return os.path.splitext(os.path.basename(html))[0]
+        if not title:
+            m = re.search(r"(?m)^#[ \t]+(.+?)[ \t#]*$", text)
+            if m:
+                title = m.group(1)
+    return title or os.path.splitext(os.path.basename(html))[0]
 
 
 def make_href(html, out_dir):
@@ -201,31 +205,35 @@ def collect_sources(src, found):
             collect_sources(fname, found)
 
 
-def git_date(files):
-    """Date (YYYY-MM-DD) of the last commit touching any of files, or None."""
+def git_last_commit(files):
+    """(timestamp, author, subject) of the last commit touching any of files, or None."""
     cwd = os.path.dirname(files[0])
     fsenc = sys.getfilesystemencoding()
-    cmd = ["git", "log", "-1", "--format=%cd", "--date=short", "--"] + \
+    cmd = ["git", "log", "-1", "--format=%ct%x1f%an%x1f%s", "--"] + \
         [os.path.relpath(f, cwd) for f in files]
     try:
         out = subprocess.check_output([c.encode(fsenc) for c in cmd], cwd=cwd.encode(fsenc),
                                       stderr=subprocess.STDOUT)
     except (OSError, subprocess.CalledProcessError):
         return None
-    out = out.strip()
-    return out if re.match(r"\d{4}-\d\d-\d\d$", out) else None
+    fields = out.decode("utf-8", "replace").strip().split(u"\x1f")
+    if len(fields) != 3 or not fields[0].isdigit():
+        return None
+    return int(fields[0]), fields[1], fields[2]
 
 
-def document_date(src, html, date_source):
-    """Last change date: git history of the source and its inserted files, else HTML mtime."""
+def document_change(src, html, date_source):
+    """(timestamp, tooltip) of the last change: git history of the source and its
+    inserted files, else HTML mtime (tooltip is then empty)."""
     if date_source == "git" and src:
         found = {}
         collect_sources(src, found)
         if found:
-            date = git_date(sorted(found.values()))
-            if date:
-                return date
-    return time.strftime("%Y-%m-%d", time.localtime(os.path.getmtime(html)))
+            commit = git_last_commit(sorted(found.values()))
+            if commit:
+                ts, author, subject = commit
+                return ts, u"%s: %s" % (author, subject)
+    return int(os.path.getmtime(html)), u""
 
 
 def collect_documents(col, root, out_file, date_source):
@@ -251,10 +259,13 @@ def collect_documents(col, root, out_file, date_source):
             if not os.path.isfile(html):
                 warn("column '%s': %s not built, skipped" % (col["title"], os.path.relpath(html, root)))
                 continue
+            ts, tooltip = document_change(src, html, date_source)
             docs.append({
                 "title": title or resolve_title(src, html),
                 "html": html,
-                "date": document_date(src, html, date_source),
+                "ts": ts,
+                "date": time.strftime("%Y-%m-%d", time.localtime(ts)),
+                "tooltip": tooltip,
             })
     if col.get("sort") == "title":
         docs.sort(key=lambda d: d["title"].lower())
@@ -268,7 +279,31 @@ def render(cfg, columns, out_dir):
     show_dates = cfg.get("show_dates", True)
     mark_new = cfg.get("mark_new", True)
     max_cols = cfg.get("max_columns_per_row")
-    today = time.strftime("%Y-%m-%d")
+    show_formats = cfg.get("show_formats", True)
+    recent_count = int(cfg.get("recent", 8))
+    # "new" = changed today or within the previous new_days - 1 days
+    new_days = max(1, int(cfg.get("new_days", 2)))
+    new_since = time.strftime("%Y-%m-%d", time.localtime(time.time() - (new_days - 1) * 86400))
+    generated = time.strftime("%Y-%m-%d %H:%M")
+
+    def render_item(d, column_title=None):
+        # HTML and PDF open in a new tab; docx is a download, so it keeps the default
+        item = u'<li><a href="%s" target="_blank" rel="noopener">%s</a>' % (make_href(d["html"], out_dir), esc(d["title"]))
+        if mark_new and d["date"] >= new_since:
+            item += u'<span class="new">new</span>'
+        if show_dates:
+            tip = u' title="%s"' % esc(d["tooltip"]) if d["tooltip"] else u""
+            item += u'<time%s>%s</time>' % (tip, d["date"])
+        if show_formats:
+            # Secondary links: only formats that are built next to the HTML
+            for ext in (".pdf", ".docx"):
+                other = os.path.splitext(d["html"])[0] + ext
+                if os.path.isfile(other):
+                    target = u' target="_blank" rel="noopener"' if ext == ".pdf" else u""
+                    item += u'<a class="fmt" href="%s"%s>%s</a>' % (make_href(other, out_dir), target, ext[1:])
+        if column_title:
+            item += u'<span class="col">%s</span>' % esc(column_title)
+        return item + u'</li>'
 
     out = [
         u'<!DOCTYPE html>',
@@ -283,26 +318,56 @@ def render(cfg, columns, out_dir):
         u'<header><h1>%s</h1>' % title,
     ]
     if use_filter:
-        out.append(u'<input id="filter" type="search" placeholder="Filter documents (press /)" aria-label="Filter documents">')
+        out.append(u'<span id="filter-count"></span>')
+        out.append(u'<input id="filter" type="search" placeholder="Filter documents (press /)" title="Press / to focus, Esc to clear" aria-label="Filter documents">')
     out.append(u'</header>')
+
+    if recent_count > 0:
+        # Most recently changed documents across all columns (each document once)
+        seen, recent = set(), []
+        for col, docs in columns:
+            for d in docs:
+                key = os.path.normcase(d["html"])
+                if key not in seen:
+                    seen.add(key)
+                    recent.append((d, col["title"]))
+        recent.sort(key=lambda x: -x[0]["ts"])
+        out.append(u'<section id="recent"><h2>Recently updated</h2><ul>')
+        for d, col_title in recent[:recent_count]:
+            out.append(render_item(d, col_title))
+        out.append(u'</ul></section>')
+
     out.append(u'<main style="--max-cols:%d">' % int(max_cols) if max_cols else u'<main>')
     for col, docs in columns:
         out.append(u'<section><h2>%s</h2><ul>' % esc(col["title"]))
         for d in docs:
-            item = u'<li><a href="%s">%s</a>' % (make_href(d["html"], out_dir), esc(d["title"]))
-            if mark_new and d["date"] == today:
-                item += u'<span class="new">new</span>'
-            if show_dates:
-                item += u'<time>%s</time>' % d["date"]
-            out.append(item + u'</li>')
+            out.append(render_item(d))
         out.append(u'</ul></section>')
     out.append(u'</main>')
-    out.append(u'<footer>Generated %s &middot; prodoc %s</footer>' % (today, util.get_toolver()))
+    out.append(u'<footer>Generated %s &middot; prodoc %s</footer>' % (generated, util.get_toolver()))
     if use_filter:
         out.append(u'<script>%s</script>' % read_text(JS_FILE).strip())
     out.append(u'</body>')
     out.append(u'</html>')
     return u"\n".join(out) + u"\n"
+
+
+def write_atomic(path, text):
+    """Write to a temporary file, then replace path in one step, so a web server
+    never serves a half-written page."""
+    tmp = path + ".tmp"
+    with io.open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    try:
+        import ctypes
+        # MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH
+        if ctypes.windll.kernel32.MoveFileExW(unicode(tmp), unicode(path), 0x1 | 0x8):
+            return
+    except (ImportError, AttributeError):
+        pass
+    if os.path.exists(path):
+        os.remove(path)
+    os.rename(tmp, path)
 
 
 def main():
@@ -331,8 +396,7 @@ def main():
         else:
             warn("column '%s' has no documents, skipped" % col["title"])
 
-    with io.open(out_file, "w", encoding="utf-8", newline="\n") as f:
-        f.write(render(cfg, columns, out_dir))
+    write_atomic(out_file, render(cfg, columns, out_dir))
     print console(u"Generated %s (%d documents)" % (out_file, sum(len(d) for _, d in columns)))
 
 
