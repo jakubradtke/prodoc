@@ -1,4 +1,4 @@
 # prodoc version. Bump it together with the release git tag (vX.Y).
 # Changing it also triggers documentation rebuild.
 
-version = 1.7
+version = 1.8
