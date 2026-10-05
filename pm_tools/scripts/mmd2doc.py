@@ -214,6 +214,11 @@ class PandocPreproc(object):
         Insert an image to the (markdown) output
         """
 
+        # run_plugin() passes "empty" for a plugin block without arguments;
+        # that is a placeholder, not a caption ("Figure: empty")
+        if title == "empty":
+            title = ""
+
         if fnimg.endswith("svg"):
             # Instead of returning HTML for embedded SVG, return a "reference" - just some text 
             # that we can replace with SVG embedding after pandoc creates HTML. The reason is
@@ -1044,6 +1049,14 @@ def build_doc(opts):
                 cap.attrs["class"] = "table_caption"
                 tbl.wrap(div)
                 tbl.insert_after(cap)
+
+            # PDF: caption above the table, as in the DOCX output (native, csv and xls tables)
+            if opts.fmt == "pdf":
+                for div in doc.find_all("div", class_="table"):
+                    cap = div.find("p", class_="table_caption")
+                    tbl = div.find("table")
+                    if cap and tbl:
+                        tbl.insert_before(cap)
             
             # Add ids to figures
             for fig in doc.find_all("div", class_="figure"):
@@ -1076,7 +1089,7 @@ def build_doc(opts):
                 # javascript-delay 25000 needed to make sure wkhtmltopdf doesn't cut off
                 # mathjax and other javascript in the middle
                 pdf_start = time.time()
-                _call('"%s" --javascript-delay 25000 --footer-html "%s" --margin-bottom 15mm --margin-top 15mm --print-media-type "%s" "%s"' % (g.wkhtmltopdf, pdf_footer_link, outfile, pdf_file), errors_are_warnings=True)
+                _call('"%s" --javascript-delay 25000 --footer-html "%s" --margin-bottom 15mm --margin-top 15mm --margin-left 20mm --margin-right 20mm --print-media-type "%s" "%s"' % (g.wkhtmltopdf, pdf_footer_link, outfile, pdf_file), errors_are_warnings=True)
                 # wkhtmltopdf errors are only warnings above, and it may crash without output
                 # (e.g. on MathJax over HTTPS), so check that a fresh PDF really exists
                 if not os.path.isfile(pdf_file) or os.path.getmtime(pdf_file) < pdf_start - 1:

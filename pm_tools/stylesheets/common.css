@@ -915,4 +915,11 @@ div.feedback td { white-space: pre-wrap; padding: 2px 4px; }
 table.notes { margin-top: 2px; }
 #MAIN .caption { margin-top: 1em; }
 
+/* PDF look follows the DOCX template (reference.dotx). Last in the file, so it wins
+   over the screen rules above. */
+@media print {
+h1, h2, h3, h4, h5, h6, p.title { color: #0860A8; }
+th { background-color: #E8F1F8; }
+div.figure p, p.table_caption { color: #0860A8; }
+}
 </style>

@@ -47,6 +47,20 @@ class CsvPlugin(object):
             while (len(r) < max_size):
                 r.append("")
 
+        if self.pp.fmt == "docx" and link is None:
+            # Raw HTML tables are dropped by pandoc's docx writer (only the cell text is
+            # left, as loose paragraphs), so emit a markdown pipe table for Word
+            def cell(d):
+                return clean(d).replace("|", "\\|").replace("\n", " ") or " "
+            s = "\n\n"
+            s += "| " + " | ".join(cell(d) for d in rows[0]) + " |\n"
+            s += "|" + "---|" * max_size + "\n"
+            for row in rows[1:]:
+                s += "| " + " | ".join(cell(d) for d in row) + " |\n"
+            if title.strip() != "":
+                s += "\nTable: %s\n" % title
+            return s + "\n"
+
         tid = ""
         if title.strip() != "":
             tid = ' id="%s"'%self.pp.title2id("table-" + title)
