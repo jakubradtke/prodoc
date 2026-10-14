@@ -260,8 +260,10 @@ def get_config(start_dir='.', skip_hooks=False):
                         dict1[k2] = os.path.normpath(dict1[k2])
                     else:
                         dict1[k2] = [os.path.normpath(x) for x in dict1[k2]]
-            norm_paths('build_targets', 'src')
-            norm_paths('build_targets', 'dst')
+            # build.cfg of a prodoc-only repository may have no build_targets
+            if config.get('build_targets'):
+                norm_paths('build_targets', 'src')
+                norm_paths('build_targets', 'dst')
             # Side effect: if we're in the repo, check and populate git hooks
             if not skip_hooks:
                 if os.path.isdir(os.path.join(path, '.git')):

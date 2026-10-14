@@ -21,6 +21,7 @@ import inspect
 import time
 import sqlite3
 import docsrv
+import symbols as _symbols
 from shutil import copy2
 
 _thisdir = os.path.dirname(os.path.realpath(__file__))
@@ -75,8 +76,12 @@ g.fonts = '<link rel="stylesheet" href="%s">'%toolcfg['fonts']
 g.java_exe = util.locate_java()
 
 class PandocPreproc(object):
-    def __init__(self, fname, assets="assets", auto="auto", fmt="html"):
+    def __init__(self, fname, assets="assets", auto="auto", fmt="html", symbols=None, releases=None):
         self.token = collections.namedtuple('Token', ['typ', 'value', 'line', 'column'])
+        # Symbols stack: one dict per document (included files get a copy of the parent's symbols,
+        # extended with the include parameters), in step with self.dirs. See symbols.py.
+        self.symbols = [dict(symbols or {})]
+        self.releases = list(releases or [])
         self.legal_tokens = ["visio", "svg"] # these are tightly integrated, the rest comes from plugins/*
         self.assets = assets
         self.assets_paths = set(['.', assets]);
@@ -401,7 +406,13 @@ class PandocPreproc(object):
         kwargs.update(div_style=div_style)
         args = list(args)
         if len(args) == 0:
-            args.append("empty")
+            # Plugins take a title or file name as the first positional argument; give a
+            # placeholder unless that parameter is already passed by keyword, as in
+            # python_run(output="verbatim") whose first parameter is "output"
+            spec = inspect.getargspec(func)
+            first = spec.args[2] if len(spec.args) > 2 else None  # (self, code, first, ...)
+            if first is None or first not in kwargs:
+                args.append("empty")
         start_time = time.time()
         if g.opts.perf: sys.stdout.write("Running %s..." % (token.value.splitlines()[0]))
         try:
@@ -421,12 +432,26 @@ class PandocPreproc(object):
             print "While processing %s token:\n%s"%(token.typ, token.value)
             raise
 
-    def insert_file(self, fullpath):
+    def preprocess_text(self, text, fname, symbols=None):
+        """
+        Symbols from the YAML header, {{NAME}} substitution and <!--if:--> blocks (see symbols.py).
+        Runs on the raw text before tokenization, so plugins in a dropped block never run.
+        """
+        if symbols is None:
+            symbols = self.symbols[-1]
+        try:
+            # Plugin blocks (```plantuml(...)) keep conditions active; other code blocks do not
+            plugin_tokens = set(t.lower() for t in self.legal_tokens)
+            return _symbols.preprocess_text(text, symbols, self.releases, fname, g.opts.verbose, plugin_tokens)
+        except _symbols.SymbolError as e:
+            error("%s" % e)
+
+    def insert_file(self, fullpath, symbols=None):
         """
         Read file and collect new tokens
         """
         # Read the file and insert contents into the token queue
-        insert_code = open(fullpath, "r").read()
+        insert_code = self.preprocess_text(open(fullpath, "r").read(), fullpath, symbols)
         # Insert a newline at the start
         insert_code = "\n\n" + insert_code + "\n\n"
         new_tokens = [t for t in self.tokenize(insert_code, self.token_specification)]
@@ -436,7 +461,7 @@ class PandocPreproc(object):
         """
         Parse the file, build output collateral as needed
         """
-        src_code = open(fname, "r").read()
+        src_code = self.preprocess_text(open(fname, "r").read(), fname)
         dirname = os.path.dirname(os.path.abspath(fname))
 
         # Make sure we have 'auto' instantiated!
@@ -481,7 +506,8 @@ class PandocPreproc(object):
         # User may also include a file glob if desired (*, ?).
         # If the user has defined the tag with a !, the heading level is reset (i.e., supplied
         # by the contained chapter)
-        self.token_specification.append(("INSERT_FILE", r"(?m)^\s*\[(?:(docx|html|pdf):)?!?[\w\-\*\?\s\/\.]+.mm?d\]"))
+        # Optional include parameters after ||: [_file.md||NAME:"value",NAME2:value] (symbols.py)
+        self.token_specification.append(("INSERT_FILE", r"(?m)^\s*\[(?:(docx|html|pdf):)?!?[\w\-\*\?\s\/\.]+.mm?d(?:\|\|[^\]]*)?\]"))
         self.token_specification.append(("HEADER", "(?m)^#+[^#]"))
 
         # Add code section (````<blah>```) as a token, to skip parsing opens/fixmes in them
@@ -506,12 +532,14 @@ class PandocPreproc(object):
             elif token.typ == "INSERT_FILE":
                 s = self.parse_insert_file(token)
             elif token.typ == "PUSH_DIR":
-                _dir, no_hlevel =  token.value
+                _dir, no_hlevel, child_symbols = token.value
                 self.dirs.append(_dir)
+                self.symbols.append(child_symbols)
                 g.hlevel.append(0 if no_hlevel else hlevel)
                 s = ""
             elif token.typ == "POP_DIR":
                 self.dirs.pop()
+                self.symbols.pop()
                 g.hlevel.pop()
                 s = ""
             elif token.typ == "HEADER":
@@ -542,7 +570,17 @@ class PandocPreproc(object):
         """
         Token parser for inline files
         """
-        inner = re.search(r"\[(.*)\]", token.value).group(1).replace("/", "\\")
+        inner = re.search(r"\[(.*)\]", token.value).group(1)
+        # Include parameters: [_file.md||NAME:"value",...] become symbols of the included file
+        params = {}
+        if "||" in inner:
+            inner, param_str = inner.split("||", 1)
+            inner = inner.rstrip()
+            try:
+                params = _symbols.parse_include_params(param_str)
+            except _symbols.SymbolError as e:
+                error("%s: %s" % (self.fname, e))
+        inner = inner.replace("/", "\\")
         if re.match(r'^(docx|html|pdf):', inner):
             fmt_cond, inner = inner.split(':', 1)
             if fmt_cond != self.fmt:
@@ -570,8 +608,12 @@ class PandocPreproc(object):
             s = token.value
         else:
             for f in sorted(glob.glob(fullpath)):
-                new_tokens = self.insert_file(f)
-                push_dir = self.token("PUSH_DIR", (os.path.dirname(fullpath), no_hlevel), 0, 0)
+                # The included file sees a copy of the parent's symbols plus the include parameters.
+                # The copy travels with PUSH_DIR, so nested includes use it while its tokens are processed.
+                child_symbols = dict(self.symbols[-1])
+                child_symbols.update(params)
+                new_tokens = self.insert_file(f, child_symbols)
+                push_dir = self.token("PUSH_DIR", (os.path.dirname(fullpath), no_hlevel, child_symbols), 0, 0)
                 pop_dir = self.token("POP_DIR", 0, 0, 0)
                 self.tokens = [push_dir] + new_tokens + [pop_dir] + self.tokens
             s = ""
@@ -853,9 +895,9 @@ def get_src_path(fn):
         if row is not None:
             relpath = row[0]
         deptree_conn.close()
-    return cfg["repo_name"], relpath.replace('\\', '/')
+    return cfg.get("repo_name", "UNRELEASED"), relpath.replace('\\', '/')
 
-def append_preprocessed_sections(infile, append_files, doc_dir, fmt, outfile):
+def append_preprocessed_sections(infile, append_files, doc_dir, fmt, outfile, symbols=None, releases=None, auto="auto"):
     """
     Append preprocessed markdown file(s) to the pandoc input, each preceded by a page break.
     Missing append files are skipped silently (verbose mode prints a warning).
@@ -874,7 +916,7 @@ def append_preprocessed_sections(infile, append_files, doc_dir, fmt, outfile):
                     warn("Skipping --append file (not found): '%s'" % append_abs)
                 continue
             log_dependency(outfile, append_abs)
-            append_preproc = PandocPreproc(append_abs, fmt=fmt)
+            append_preproc = PandocPreproc(append_abs, fmt=fmt, symbols=symbols, releases=releases, auto=auto)
             f.write("\n\n\\newpage\n\n")
             f.write(open(append_preproc.outf.name).read())
 
@@ -893,6 +935,10 @@ def build_doc(opts):
     if opts.markdown_files and not final_file_list:
         raise Exception('Couldn\'t locate input file(s): %s'%(', '.join(opts.markdown_files)))
 
+    # Expand every input into (file, variant) jobs. A document lists its variants under
+    # "variants:" in the YAML header; --variant builds one variant only. No variants = one
+    # build with the output name as before. See symbols.py.
+    jobs = []
     for filename in final_file_list:
 
         fnabs = os.path.abspath(filename) # also normalizes slashes to backslashes
@@ -901,17 +947,47 @@ def build_doc(opts):
         if (not ftype in valid_ftypes):
             raise Exception("Invalid file type %s.  Valid types include: %s" % (ftype,  ",".join(valid_ftypes)))
 
+        try:
+            build_cfg = _symbols.load_build_config(os.path.dirname(fnabs))
+            if opts.variant:
+                variants = [opts.variant]
+            elif opts.nopre:
+                variants = [None]
+            else:
+                variants = _symbols.header_variants(_symbols.read_header(open(fnabs, "r").read())) or [None]
+        except _symbols.SymbolError as e:
+            error("%s: %s" % (fnabs, e))
+        for variant in variants:
+            jobs.append((fnabs, variant, build_cfg))
+
+    for fnabs, variant, build_cfg in jobs:
+
+        # Output name: <doc>.<variant>.<ext>; generated files go to auto\<variant>\ because
+        # figure numbering (f1, f2, ...) differs between variants
+        suffix = ".%s" % variant if variant else ""
+        auto_dir = os.path.join("auto", variant) if variant else "auto"
+        try:
+            symbols = _symbols.make_symbols(build_cfg, variant, opts.define, opts.fmt)
+        except _symbols.SymbolError as e:
+            error("%s: %s" % (fnabs, e))
+        # Per-document state of the preprocessor
+        g.figure_count = 0
+        g.svg_hash = {}
+        g.svg_fixes = []
+
         if (opts.fmt == "docx"):
-            outfile = util.replace_ext(fnabs, ".docx")
+            outfile = util.replace_ext(fnabs, suffix + ".docx")
         elif (opts.fmt == "html"):
             if opts.email:
-                outfile = util.replace_ext(fnabs, ".email.html")
+                outfile = util.replace_ext(fnabs, suffix + ".email.html")
             else:
-                outfile = util.replace_ext(fnabs, ".html")
+                outfile = util.replace_ext(fnabs, suffix + ".html")
         elif (opts.fmt == "pdf"):
-            pdf_file = util.replace_ext(fnabs, ".pdf")     # Final pdf output
-            outfile = util.replace_ext(fnabs, "_pdf.html") # Temporary html to feed to wkhtmltopdf
+            pdf_file = util.replace_ext(fnabs, suffix + ".pdf")     # Final pdf output
+            outfile = util.replace_ext(fnabs, suffix + "_pdf.html") # Temporary html to feed to wkhtmltopdf
             log_dependency(pdf_file, fnabs)
+        if variant:
+            print "Variant '%s': %s" % (variant, outfile)
         cleanup_deptree(outfile)
         log_dependency(outfile, fnabs)
         cwd_outfile = os.path.split(outfile)[1]
@@ -920,7 +996,7 @@ def build_doc(opts):
         infile = fnabs
         if (not opts.nopre):
             # preproc is *enabled* (default behavior)
-            preproc = PandocPreproc(fnabs, fmt=opts.fmt)
+            preproc = PandocPreproc(fnabs, fmt=opts.fmt, symbols=symbols, releases=build_cfg["releases"], auto=auto_dir)
             infile = preproc.outf.name # tmp file in tmp directory
                                        # TODO: wouldn't hurt to clean up those tmp files from time to time
         elif opts.append:
@@ -932,7 +1008,8 @@ def build_doc(opts):
         dirname = os.path.dirname(fnabs)
 
         if opts.append:
-            infile = append_preprocessed_sections(infile, opts.append, dirname, opts.fmt, outfile)
+            infile = append_preprocessed_sections(infile, opts.append, dirname, opts.fmt, outfile,
+                                                  symbols, build_cfg["releases"], auto_dir)
         assert dirname != ""
 
         # Add toolver and other variables
@@ -1447,7 +1524,7 @@ def make_dir(root, subdir):
     dirname = os.path.join(root, subdir)
     if not os.path.exists(dirname):
         try:
-            os.mkdir(dirname)
+            os.makedirs(dirname)  # subdir may be nested: auto\<variant>
         except:
             # Don't fail right away just on mkdir exception: in parallel build
             # another process may have created the directory after we checked
@@ -1620,6 +1697,11 @@ def setup_parser():
     parser.add_argument('--email', required=False, action="store_true", default=False, help='Send self an email with the document content')
     parser.add_argument('--append', action='append', default=[], metavar='FILE',
         help='Markdown file(s) to append after main document (preprocessed, with page break)')
+    parser.add_argument('--variant', required=False, default=None, metavar='NAME',
+        help='Build only this variant (symbols from "variants" in build.cfg); output is <doc>.<NAME>.<ext>. '
+             'Without it, every variant listed under "variants:" in the YAML header is built.')
+    parser.add_argument('--define', action='append', default=[], metavar='NAME=VALUE',
+        help='Define a symbol for {{NAME}} substitution and <!--if:--> conditions (repeatable, overrides build.cfg)')
 
     return parser
 

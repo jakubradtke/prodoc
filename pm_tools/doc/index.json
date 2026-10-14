@@ -4,7 +4,8 @@
     {
       "title": "Reference",
       "documents": [
-        "example.mmd"
+        "example.mmd",
+        {"path": "variants.mmd", "variant": "internal"}
       ]
     },
     {
@@ -14,5 +15,13 @@
         "hello_world/*.md"
       ]
     }
+  ],
+  "home_title": "General",
+  "releases": [
+    {"id": "v2", "title": "Release 2.0"},
+    {"id": "v1", "title": "Release 1.0", "archived": true}
+  ],
+  "release_columns": [
+    {"title": "Reference", "documents": ["variants.mmd"]}
   ]
 }

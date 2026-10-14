@@ -18,6 +18,10 @@ class PythonrunPlugin(object):
 
         Ensure support of full pre-processing
         """
+        # A block without arguments gets "empty" as the first positional argument (mmd2doc.run_plugin)
+        if output == "empty":
+            output = "markdown"
+
         if name is None:
             f = tempfile.NamedTemporaryFile(mode='w', delete=False)
         else:

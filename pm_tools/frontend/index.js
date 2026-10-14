@@ -92,7 +92,9 @@
       var html = "";
       for (var k = 0; k < Math.min(hits.length, MAX_RESULTS); k++) {
         var h = hits[k][1], doc = data.docs[h[0]];
-        html += '<li><a href="' + esc(doc[1]) + "#" + esc(h[1]) + '" target="_blank" rel="noopener">' +
+        // doc[2]: tab (release) of the document when the index has several tabs
+        html += '<li>' + (doc[2] ? '<span class="tab-label">' + esc(doc[2]) + "</span>" : "") +
+          '<a href="' + esc(doc[1]) + "#" + esc(h[1]) + '" target="_blank" rel="noopener">' +
           esc(doc[0]) + (h[2] ? " › " + esc(h[2]) : "") + "</a>" +
           '<div class="snip">' + snippet(h[3] || h[2], words, cs) + "</div></li>";
       }

@@ -6,6 +6,14 @@ h1{margin:0;font-size:1.6rem}
 #filter,#content-search{padding:4px 8px;min-width:16rem;font:inherit;border:1px solid #ccc;border-radius:4px}
 .match-case{margin-left:-16px;font-size:.85em;color:#555;white-space:nowrap;cursor:pointer}
 .match-case input{vertical-align:middle;margin:0 2px 0 0}
+nav.pages{display:flex;flex-wrap:wrap;gap:0 4px;margin:-12px 0 24px;border-bottom:1px solid #d8dde6}
+nav.pages .tab{margin-bottom:-1px;padding:6px 14px;border:1px solid transparent;border-radius:6px 6px 0 0;color:#0066cc;font-weight:500}
+nav.pages a.tab:hover{text-decoration:none;background:#f3f6fb;border-color:#e3e8f0 #e3e8f0 #d8dde6}
+nav.pages .tab.active{color:#222;background:#fff;border-color:#d8dde6 #d8dde6 #fff}
+nav.pages .tab.archived{color:#8a94a6;font-weight:400}
+nav.pages .tab.archived.active{color:#555}
+.tab-label{margin-right:.5em;padding:0 .4em;border:1px solid #ccd;border-radius:3px;font-size:.75em;color:#556;white-space:nowrap}
+p.empty{margin:24px 0;color:#888;font-style:italic}
 #recent{margin-bottom:28px;padding:12px 16px;background:#f7f9fc;border:1px solid #e3e8f0;border-radius:6px}
 #recent ul{columns:2 28rem;column-gap:32px}
 #recent li{break-inside:avoid}

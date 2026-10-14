@@ -333,6 +333,67 @@ the document directory is automatically appended to every DOCX build. Do not com
 _license.md` with `[docx:!_license.md]` in the same document, or the license section will appear
 twice.
 
+## Symbols, conditional text and variants
+
+One source can produce several documents: a customer and an internal edition, one edition per
+release, or the same template filled for each release. Three building blocks, all processed
+before anything else (so a plugin inside a dropped block never runs):
+
+* **Symbols**: `{{NAME}}` in the text is replaced by the value of the symbol `NAME`. Only
+  defined names are replaced, so a literal `{{UNKNOWN}}` or a single-brace `{placeholder}` stays
+  as it is. Write `\{{NAME}}` to keep `{{NAME}}` literally.
+* **Conditional blocks**: `<!--if:EXPR-->` ... `<!--elif:EXPR-->` ... `<!--else-->` ...
+  `<!--endif-->`. `EXPR` is a Python expression over the symbols (`==`, `!=`, `in`, `and`,
+  `or`, `not`, parentheses, `defined("NAME")`). Blocks nest. An undefined name makes the
+  condition false, so `<!--if:NAME-->` means "when NAME is defined and not empty". Markers can
+  sit inside a line, also in the YAML header (`title: Spec<!--if:DRAFT--> (draft)<!--endif-->`).
+  Markers inside inline code or a fenced code block are plain text, as in this paragraph. In
+  plugin blocks (for example `plantuml`) they stay active, so a diagram line can be conditional.
+* **Variants**: `variants: [a, b]` in the YAML header builds the document once per variant, to
+  `doc.a.html` and `doc.b.html` (also `.docx`, `.pdf`). Without `variants:` nothing changes.
+
+Symbols come from, highest priority first:
+
+1. the command line: `build.bat --define NAME=VALUE --variant NAME doc.md`,
+2. `build.cfg` in the document folder or any folder above it (Python syntax):
+
+        releases = ["1.0", "2.0"]                 # in order: RELEASE >= "2.0" works
+        symbols  = {"PRODUCT": "prodoc", "AUDIENCE": "public"}
+        variants = {"internal": {"AUDIENCE": "internal"}, "v2": {"RELEASE": "2.0"}}
+
+3. include parameters: `[_chapter.md||TOPIC:"first topic",LEVEL:1]` (values are strings, seen
+   only inside the included file, which otherwise inherits the symbols of the including file),
+4. `symbols:` in the YAML header of the document (defaults; they never override the above).
+
+Built-in symbols: `VARIANT` (the variant name, empty without one), `FMT` (`html`, `docx` or
+`pdf`) and, when `build.cfg` lists `releases`, `RELEASE` compares by position in that list.
+
+This folder has a `build.cfg` with the values above, so with `PRODUCT` = {{PRODUCT}} and
+`AUDIENCE` = {{AUDIENCE}} the following block
+
+```markdown
+<!--if:AUDIENCE == "internal"-->
+Internal edition.
+<!--else-->
+Public edition.
+<!--endif-->
+```
+
+renders as:
+
+<!--if:AUDIENCE == "internal"-->
+Internal edition.
+<!--else-->
+Public edition.
+<!--endif-->
+
+Build `build.bat --define AUDIENCE=internal example.mmd` to see the other branch. The document
+`variants.mmd` next to this file shows `variants:`, `RELEASE` comparisons and includes with
+parameters; it builds to `variants.internal.html`, `variants.v1.html` and `variants.v2.html`.
+
+In `index.json`, link a variant with `{"path": "variants.mmd", "variant": "v2"}` and group
+documents per release with `pages` (see the README, "Index page").
+
 
 # Plugins
 

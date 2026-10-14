@@ -19,6 +19,7 @@ JSON format (paths are relative to the JSON file):
   "date_source": "git",                  # optional: "git" (last commit of source + inserted
                                          #   files, falls back to "file") or "file" (HTML mtime)
   "max_columns_per_row": 3,              # optional, grid auto-fits when omitted
+  "home_title": "General",               # optional, tab label of the main page (default: title)
   "columns": [
     {
       "title": "Architecture",
@@ -26,11 +27,26 @@ JSON format (paths are relative to the JSON file):
       "documents": [
         "path/to/doc.md",                # link goes to path/to/doc.html
         {"path": "path/to/other.mmd", "title": "Explicit title"},
+        {"path": "path/to/var.md", "variant": "26.H2"},   # link goes to path/to/var.26.H2.html
         "path/**/*.md"                   # globs: *, ?, ** (recursive)
       ]
     }
+  ],
+  "releases": [                          # optional, one tab (sub-page) per release
+    {"id": "26.H2", "title": "26.H2", "dir": "26H2"},
+    {"id": "legacy", "title": "Legacy", "dir": "Legacy", "archived": true}
+  ],
+  "release_columns": [                   # columns of every release tab; {{key}} = value from the release
+    {"title": "Validation", "documents": ["Validation/{{dir}}/*.md"]}
+  ],
+  "pages": [                             # optional, free-form extra tabs
+    {"title": "Tools", "output": "index-tools.html", "columns": [...]}
   ]
 }
+
+Documents with "variants:" in their YAML header are built to <doc>.<variant>.html. On a release
+tab (variant = release id) such a document links its variant build, or is left out when the
+release is not in its variants list. On other tabs it is listed once per variant.
 """
 
 import os
@@ -45,9 +61,12 @@ import urllib
 import argparse
 import subprocess
 
+import copy
+
 import yaml
 
 import util
+import symbols
 
 _thisdir = os.path.dirname(os.path.abspath(__file__))
 CSS_FILE = os.path.join(_thisdir, "..", "stylesheets", "index.css")
@@ -85,18 +104,52 @@ def load_config(fname):
         cfg = json.loads(read_text(fname))
     except ValueError as e:
         fail("Invalid JSON in %s: %s" % (fname, e))
-    if not isinstance(cfg, dict) or not isinstance(cfg.get("columns"), list) or not cfg["columns"]:
-        fail("%s: 'columns' must be a non-empty list" % fname)
+    if not isinstance(cfg, dict):
+        fail("%s: top level must be a JSON object" % fname)
+    for key in ("pages", "releases", "release_columns"):
+        if not isinstance(cfg.get(key, []), list):
+            fail("%s: '%s' must be a list" % (fname, key))
+    pages, releases = cfg.get("pages", []), cfg.get("releases", [])
+    if not isinstance(cfg.get("columns", []), list) or (not cfg.get("columns") and not pages and not releases):
+        fail("%s: 'columns' must be a non-empty list (or define 'releases' or 'pages')" % fname)
     if cfg.get("date_source", "git") not in ("git", "file"):
         fail("%s: invalid 'date_source' (use 'git' or 'file')" % fname)
-    for i, col in enumerate(cfg["columns"]):
+    validate_columns(fname, cfg.get("columns", []))
+    if releases and not cfg.get("release_columns") and not all(r.get("columns") for r in releases if isinstance(r, dict)):
+        fail("%s: 'releases' needs 'release_columns' (or 'columns' in every release)" % fname)
+    validate_columns(fname, cfg.get("release_columns", []))
+    ids = set()
+    for i, rel in enumerate(releases):
+        if not isinstance(rel, dict) or not rel.get("id"):
+            fail("%s: release #%d has no 'id'" % (fname, i + 1))
+        rid = unicode(rel["id"])
+        if not re.match(r"^[\w.\-]+$", rid):
+            fail("%s: release id '%s' may contain only letters, digits, '.', '-' and '_'" % (fname, rid))
+        if rid in ids:
+            fail("%s: release '%s' is listed twice" % (fname, rid))
+        ids.add(rid)
+        if not isinstance(rel.get("columns", []), list):
+            fail("%s: release '%s': 'columns' must be a list" % (fname, rid))
+        validate_columns(fname, rel.get("columns", []))
+    for i, page in enumerate(pages):
+        if not isinstance(page, dict) or not page.get("title"):
+            fail("%s: page #%d has no 'title'" % (fname, i + 1))
+        if not page.get("output"):
+            fail("%s: page '%s' has no 'output' file name" % (fname, page["title"]))
+        if not isinstance(page.get("columns"), list) or not page["columns"]:
+            fail("%s: page '%s' has no 'columns' list" % (fname, page["title"]))
+        validate_columns(fname, page["columns"])
+    return cfg
+
+
+def validate_columns(fname, columns):
+    for i, col in enumerate(columns):
         if not isinstance(col, dict) or not col.get("title"):
             fail("%s: column #%d has no 'title'" % (fname, i + 1))
         if not isinstance(col.get("documents"), list):
             fail("%s: column '%s' has no 'documents' list" % (fname, col["title"]))
         if col.get("sort", "none") not in ("none", "title"):
             fail("%s: column '%s' has invalid 'sort' (use 'title' or 'none')" % (fname, col["title"]))
-    return cfg
 
 
 def glob_to_regex(pattern):
@@ -166,8 +219,21 @@ def find_source(fname):
     return None, html
 
 
+def html_title(html):
+    """<title> of a built HTML page: the document title after symbol substitution
+    ({{NAME}} in the YAML title), or None."""
+    with io.open(html, "r", encoding="utf-8", errors="replace") as f:
+        head = f.read(200000)
+    m = re.search(r"<title>(.*?)</title>", head, re.S | re.I)
+    if not m:
+        return None
+    return html_text(m.group(1)) or None
+
+
 def resolve_title(src, html):
-    """Title from YAML front matter, then first '# ' heading, then file name."""
+    """Title from YAML front matter, then first '# ' heading, then file name. A YAML title
+    with symbols ({{NAME}}) or conditions (<!--if:-->) is taken from the built HTML <title>
+    instead, where it is already substituted."""
     title = None
     if src and os.path.isfile(src):
         text = read_text(src)
@@ -180,6 +246,8 @@ def resolve_title(src, html):
                 data = None
             if isinstance(data, dict) and data.get("title"):
                 title = unicode(data["title"]).strip()
+                if u"{{" in title or u"<!--" in title:
+                    title = html_title(html) or title
             text = text[m.end():]
         if not title:
             m = re.search(r"(?m)^#[ \t]+(.+?)[ \t#]*$", text)
@@ -311,48 +379,143 @@ def document_change(src, html, date_source):
     return int(os.path.getmtime(html)), u"", False
 
 
-def collect_documents(col, root, out_file, date_source):
+def source_variants(src):
+    """Variant names from "variants:" in the YAML header of a source (unicode), or []."""
+    if not src or not os.path.isfile(src):
+        return []
+    try:
+        return [v.decode("utf-8") for v in symbols.header_variants(symbols.read_header(read_text(src)))]
+    except symbols.SymbolError as e:
+        warn(u"%s: %s" % (src, e))
+        return []
+
+
+def variant_html(html, variant):
+    # Variant builds are named <doc>.<variant>.html (see "variants" in mmd2doc.py)
+    return u"%s.%s.html" % (os.path.splitext(html)[0], variant)
+
+
+def collect_documents(col, root, out_file, date_source, page_variant=None):
+    """Documents of one column. page_variant: release id of a release tab; documents with
+    "variants:" then link that variant or are left out. Template columns (release tabs) skip
+    missing documents silently, because older releases do not have every document."""
     docs = []
+    optional = col.get("_template", False)
     for entry in col["documents"]:
         if isinstance(entry, dict):
-            path, title = entry.get("path"), entry.get("title")
+            path, title, variant = entry.get("path"), entry.get("title"), entry.get("variant")
         else:
-            path, title = entry, None
+            path, title, variant = entry, None, None
         if not path:
             fail("column '%s': document entry without 'path'" % col["title"])
         path = path.replace("\\", "/")
         if "*" in path or "?" in path:
             files = expand_glob(root, path)
-            if not files:
+            if not files and not optional:
                 warn("column '%s': pattern '%s' matched no files" % (col["title"], path))
         else:
             files = [os.path.join(root, *path.split("/"))]
         for fname in files:
             src, html = find_source(os.path.normpath(fname))
-            if os.path.normcase(html) == os.path.normcase(out_file):
-                continue
-            if not os.path.isfile(html):
-                warn("column '%s': %s not built, skipped" % (col["title"], os.path.relpath(html, root)))
-                continue
-            ts, tooltip, from_git = document_change(src, html, date_source)
-            docs.append({
-                "title": title or resolve_title(src, html),
-                "html": html,
-                "ts": ts,
-                "date": time.strftime("%Y-%m-%d", time.localtime(ts)),
-                "tooltip": tooltip,
-                # HTML file time after a rebuild is always "today": not a reason for NEW
-                "dated_by_git": from_git or date_source != "git",
-                "repo": repo_root(src or html),
-            })
+            if variant:
+                htmls = [variant_html(html, variant)]
+            else:
+                variants = source_variants(src)
+                if not variants:
+                    htmls = [html]
+                elif page_variant:
+                    htmls = [variant_html(html, page_variant)] if page_variant in variants else []
+                else:
+                    htmls = [variant_html(html, v) for v in variants]
+            for html in htmls:
+                if os.path.normcase(html) == os.path.normcase(out_file):
+                    continue
+                if not os.path.isfile(html):
+                    if not (optional and src is None):
+                        warn("column '%s': %s not built, skipped" % (col["title"], os.path.relpath(html, root)))
+                    continue
+                ts, tooltip, from_git = document_change(src, html, date_source)
+                docs.append({
+                    "title": title or resolve_title(src, html),
+                    "html": html,
+                    "ts": ts,
+                    "date": time.strftime("%Y-%m-%d", time.localtime(ts)),
+                    "tooltip": tooltip,
+                    # HTML file time after a rebuild is always "today": not a reason for NEW
+                    "dated_by_git": from_git or date_source != "git",
+                    "repo": repo_root(src or html),
+                })
     if col.get("sort") == "title":
         docs.sort(key=lambda d: d["title"].lower())
     return docs
 
 
-def render(cfg, columns, out_dir, search_src=None):
+PLACEHOLDER_RE = re.compile(r"\{\{([A-Za-z_][\w\-]*)\}\}")
+
+
+def fill_placeholders(value, values, where):
+    """Copy of a JSON value with {{key}} in strings replaced from values (unknown key: error)."""
+    if isinstance(value, basestring):
+        def repl(m):
+            if m.group(1) not in values:
+                fail(u"%s: unknown placeholder {{%s}} (keys of this release: %s)"
+                     % (where, m.group(1), u", ".join(sorted(values))))
+            return values[m.group(1)]
+        return PLACEHOLDER_RE.sub(repl, value)
+    if isinstance(value, list):
+        return [fill_placeholders(v, values, where) for v in value]
+    if isinstance(value, dict):
+        return dict((k, fill_placeholders(v, values, where)) for k, v in value.items())
+    return value
+
+
+def build_pages(cfg, out_file):
+    """All tabs of the index, in navigation order: main page, releases, extra "pages",
+    archived releases last. Each page: dict(title, out, columns, variant, archived, home)."""
+    out_dir = os.path.dirname(out_file)
+    home = dict(title=cfg.get("home_title") or cfg.get("title", "Documents repository"), out=out_file,
+                columns=cfg.get("columns", []), variant=None, archived=False, home=True)
+    active, archived = [], []
+    for rel in cfg.get("releases", []):
+        rid = unicode(rel["id"])
+        values = dict((k, unicode(v)) for k, v in rel.items()
+                      if isinstance(v, (basestring, int, float)) and not isinstance(v, bool))
+        where = u"release '%s'" % rid
+        columns = []
+        for col in fill_placeholders(copy.deepcopy(cfg.get("release_columns", [])), values, where):
+            col["_template"] = True
+            columns.append(col)
+        columns += fill_placeholders(copy.deepcopy(rel.get("columns", [])), values, where)
+        page = dict(title=unicode(rel.get("title") or rid),
+                    out=os.path.normpath(os.path.join(out_dir, rel.get("output") or u"index-%s.html" % rid)),
+                    columns=columns, variant=rid,
+                    archived=bool(rel.get("archived")), home=False)
+        (archived if page["archived"] else active).append(page)
+    extra = [dict(title=p["title"], out=os.path.normpath(os.path.join(out_dir, p["output"])),
+                  columns=p["columns"], variant=None, archived=False, home=False)
+             for p in cfg.get("pages", [])]
+    pages = [home] + active + extra + archived
+    seen = set()
+    for page in pages:
+        key = os.path.normcase(page["out"])
+        if key in seen:
+            fail(u"two tabs write the same file: %s" % page["out"])
+        seen.add(key)
+        # Links between tabs and the shared search file assume one folder
+        if os.path.normcase(os.path.dirname(page["out"])) != os.path.normcase(out_dir):
+            fail(u"tab '%s': output %s must be in the folder of the main page (%s)"
+                 % (page["title"], page["out"], out_dir))
+    return pages
+
+
+def render(cfg, columns, out_dir, search_src=None, tab_title=None, nav=None, recent=None, empty_text=None):
+    """HTML of one index page.
+    nav: tabs when the index has several pages, [dict(title, href (None = this page), archived)].
+    recent: [(document, label)] for "Recently updated"; None = the newest documents of this page.
+    empty_text: shown instead of the columns when the page has no documents."""
     esc = lambda s: cgi.escape(s, True)
     title = esc(cfg.get("title", "Documents repository"))
+    page_title = title + (u" &middot; " + esc(tab_title) if tab_title else u"")
     use_filter = cfg.get("filter", True)
     show_dates = cfg.get("show_dates", True)
     mark_new = cfg.get("mark_new", True)
@@ -389,7 +552,7 @@ def render(cfg, columns, out_dir, search_src=None):
         u'<head>',
         u'<meta charset="utf-8">',
         u'<meta name="viewport" content="width=device-width,initial-scale=1">',
-        u'<title>%s</title>' % title,
+        u'<title>%s</title>' % page_title,
         u'<style>%s</style>' % read_text(CSS_FILE).strip(),
         u'</head>',
         u'<body>',
@@ -406,10 +569,25 @@ def render(cfg, columns, out_dir, search_src=None):
             out.append(u'<label class="match-case" title="Case-sensitive content search">'
                        u'<input id="match-case" type="checkbox"> Match case</label>')
     out.append(u'</header>')
+    if nav:
+        # Tabs: main page, releases, extra pages, archived releases. This page is not a link.
+        links = []
+        for tab in nav:
+            cls = [u"tab"]
+            if tab["href"] is None:
+                cls.append(u"active")
+            if tab["archived"]:
+                cls.append(u"archived")
+            label = esc(tab["title"])
+            if tab["href"] is None:
+                links.append(u'<span class="%s" aria-current="page">%s</span>' % (u" ".join(cls), label))
+            else:
+                links.append(u'<a class="%s" href="%s">%s</a>' % (u" ".join(cls), esc(tab["href"]), label))
+        out.append(u'<nav class="pages">%s</nav>' % u''.join(links))
     if search_src:
         out.append(u'<div id="content-results" hidden><h2></h2><ul></ul></div>')
 
-    if recent_count > 0:
+    if recent is None and recent_count > 0:
         # Most recently changed documents across all columns (each document once)
         seen, recent = set(), []
         for col, docs in columns:
@@ -419,11 +597,14 @@ def render(cfg, columns, out_dir, search_src=None):
                     seen.add(key)
                     recent.append((d, col["title"]))
         recent.sort(key=lambda x: -x[0]["ts"])
+    if recent:
         out.append(u'<section id="recent"><h2>Recently updated</h2><ul>')
-        for d, col_title in recent[:recent_count]:
-            out.append(render_item(d, col_title))
+        for d, label in recent[:recent_count]:
+            out.append(render_item(d, label))
         out.append(u'</ul></section>')
 
+    if not columns and empty_text:
+        out.append(u'<p class="empty">%s</p>' % esc(empty_text))
     out.append(u'<main style="--max-cols:%d">' % int(max_cols) if max_cols else u'<main>')
     for col, docs in columns:
         out.append(u'<section><h2>%s</h2><ul>' % esc(col["title"]))
@@ -492,8 +673,9 @@ def extract_sections(html):
     return out
 
 
-def write_search_index(path, columns, out_dir):
-    """Write <output>-search.js: section texts of all documents for the content search in index.js."""
+def write_search_index(path, columns, out_dir, labels=None):
+    """Write <output>-search.js: section texts of all documents for the content search in index.js.
+    labels: {normcase(html): tab title} when the index has several tabs; results then show the tab."""
     docs, entries, seen = [], [], {}
     for _, col_docs in columns:
         for d in col_docs:
@@ -502,7 +684,7 @@ def write_search_index(path, columns, out_dir):
                 continue
             seen[key] = len(docs)
             href = make_href(d["html"], out_dir)
-            docs.append([d["title"], href])
+            docs.append([d["title"], href] + ([labels.get(key, u"")] if labels is not None else []))
             for sid, heading, text in extract_sections(d["html"]):
                 entries.append([seen[key], sid, heading, text])
     data = json.dumps({"docs": docs, "s": entries}, ensure_ascii=False, separators=(",", ":"))
@@ -548,28 +730,66 @@ def main():
     # Skip git lookups when dates are neither displayed nor used for the "new" badge
     needs_dates = cfg.get("show_dates", True) or cfg.get("mark_new", True)
     date_source = cfg.get("date_source", "git") if needs_dates else "file"
-    columns = []
-    for col in cfg["columns"]:
-        docs = collect_documents(col, root, out_file, date_source)
-        if docs:
-            columns.append((col, docs))
-        else:
-            warn("column '%s' has no documents, skipped" % col["title"])
 
-    if not columns:
+    # Tabs: main page, one per release, extra "pages". All outputs sit next to the main page;
+    # -o moves the whole set.
+    pages = build_pages(cfg, out_file)
+    multi = len(pages) > 1
+    for page in pages:
+        page["data"] = []
+        for col in page["columns"]:
+            docs = collect_documents(col, root, page["out"], date_source, page["variant"])
+            if docs:
+                page["data"].append((col, docs))
+            elif not col.get("_template"):
+                warn(u"page '%s': column '%s' has no documents, skipped" % (page["title"], col["title"]))
+    all_columns = [c for page in pages for c in page["data"]]
+    total = len(set(os.path.normcase(d["html"]) for _, docs in all_columns for d in docs))
+    if total == 0:
         # Typical mistake: a JSON with web-root paths ("repo/src/...") run from another folder
         fail(u"no documents found. Paths in %s are relative to its folder (%s); "
              u"put the JSON in the folder its paths start from (e.g. the web root) and run it there. "
              u"Output not written." % (os.path.basename(json_file), root))
+
+    # Tab of each document, for labels in the content search and in "Recently updated" on the
+    # main page. A release tab wins over the main page.
+    labels = {}
+    for page in pages[1:] + pages[:1]:
+        for _, docs in page["data"]:
+            for d in docs:
+                labels.setdefault(os.path.normcase(d["html"]), page["title"])
+
     search_src = None
     if cfg.get("search", True) and cfg.get("filter", True):
-        # Content search data next to the page; loaded by index.js only when used
+        # One content search file for all tabs, next to the main page; loaded by index.js only when used
         search_file = os.path.splitext(out_file)[0] + "-search.js"
-        n_docs, n_sections = write_search_index(search_file, columns, out_dir)
+        n_docs, n_sections = write_search_index(search_file, all_columns, out_dir, labels if multi else None)
         search_src = os.path.basename(search_file)
         print console(u"Search index %s (%d documents, %d sections)" % (search_file, n_docs, n_sections))
-    write_atomic(out_file, render(cfg, columns, out_dir, search_src))
-    print console(u"Generated %s (%d documents)" % (out_file, sum(len(d) for _, d in columns)))
+
+    recent_count = int(cfg.get("recent", 8))
+    for page in pages:
+        nav, recent, tab_title = None, None, None
+        if multi:
+            nav = [dict(title=p["title"], href=None if p is page else make_href(p["out"], out_dir),
+                        archived=p["archived"]) for p in pages]
+            tab_title = None if page["home"] else page["title"]
+            if page["home"] and recent_count > 0:
+                # Main page: newest documents of all tabs, labelled with the tab (column on the main page)
+                seen, recent = set(), []
+                for p in pages:
+                    for col, docs in p["data"]:
+                        for d in docs:
+                            key = os.path.normcase(d["html"])
+                            if key not in seen:
+                                seen.add(key)
+                                recent.append((d, col["title"] if p["home"] else labels[key]))
+                recent.sort(key=lambda x: -x[0]["ts"])
+            elif sum(len(docs) for _, docs in page["data"]) <= recent_count:
+                recent = []  # small tab: the list would repeat the whole page
+        empty = u"No documents for this release yet." if page["variant"] else u"No documents."
+        write_atomic(page["out"], render(cfg, page["data"], out_dir, search_src, tab_title, nav, recent, empty))
+        print console(u"Generated %s (%d documents)" % (page["out"], sum(len(d) for _, d in page["data"])))
 
 
 if __name__ == "__main__":

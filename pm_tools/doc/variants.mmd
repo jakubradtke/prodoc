@@ -1,0 +1,41 @@
+---
+title: "{{PRODUCT}} variants example ({{VARIANT}})"
+variants: [internal, v1, v2]
+symbols:
+  OWNER: Documentation team
+...
+
+This document is built once per variant listed under `variants:` in its YAML header:
+`variants.internal.html`, `variants.v1.html` and `variants.v2.html`. The symbols come from
+`build.cfg` in this folder, the variant and the header. See `example.mmd`, chapter
+"Symbols, conditional text and variants".
+
+# Common part
+
+Product: {{PRODUCT}}. Variant: {{VARIANT}}. Owner: {{OWNER}}. Format: {{FMT}}.
+
+<!--if:AUDIENCE == "internal"-->
+# Internal notes
+
+This chapter is only in the `internal` variant.
+<!--else-->
+# Public notes
+
+This chapter is in every variant except `internal`.
+<!--endif-->
+
+<!--if:defined("RELEASE")-->
+# Release {{RELEASE}}
+
+<!--if:RELEASE >= "2.0"-->
+Feature X (new in release 2.0).
+<!--else-->
+Feature X is not available before release 2.0.
+<!--endif-->
+<!--endif-->
+
+# Included chapter with parameters
+
+[_chapter_param.md||TOPIC:"first topic",LEVEL:1]
+
+[_chapter_param.md||TOPIC:"second topic",LEVEL:2]
